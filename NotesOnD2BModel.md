@@ -47,7 +47,7 @@ The analyses that follow were computed using these standardized RTs.
 #### The Single-Process Model
 The single-process model assumes that a single response variable $X$ representing the accumulation of evidence (i.e., a "familiarity" signal) over time is responsible for both the old/new decision and the confidence decision. In particular, the accumulation of information is modeled as a Weiner diffusion process that starts at $z_{0}$ and results in a decision when the response variable reaches one of two collapsing bounds $b_{old}$ or $b_{new}$.
 <div>
-<img src="http://rci.rutgers.edu/~mmm431/misc/d2b_schematic_mod.png" style="background-color:white" height=500>
+<img src="https://mmmlab.org/misc/d2b_schematic_mod.png" style="background-color:white" height=500>
 <br>
 Figure 1: Single process model schematic
 </div>
@@ -131,14 +131,15 @@ Finally, in the single-process model, we did not distinguish between the process
 
 Figure 2 shows the results of the results of fitting the overall new/old judgments.
 <div>
-<img src="http://rci.rutgers.edu/~mmm431/misc/old_new_res.png" style="background-color:white" height=400>
+<img src="https://mmmlab.org/misc/old_new_res.png" style="background-color:white" height=400>
 <br>
 Figure 2: Single process model fit (old/new)
 </div>
 
 Figure 3 shows the result of fitting the the single process model, then modeling the remember/know judgment as random choice, with category probabilities equal to those measured in the data (i.e., with $p(\text{know}|\text{old}) = 0.5255$ and $p(\text{know}|\text{old}) = 0.4745$). In this case, the resulting multinomial distribution included 140 possible categories (as a result of the additional remember/know distinction) and the overall negative log-likelihood for the resulting model was approximately 778.74. Because the RT distributions for remember and know judgments are very similar overall, this augmented model appears to fit the data nearly as well as the simpler old/new model, with one exception: the proportion of observed high confidence "new" target words that are classified as "remember" judgments (red dashed curve) is much greater than predicted by the marginal remember/know probabilities (solid red curve).
 <div>
-<img src="http://rci.rutgers.edu/~mmm431/misc/rem_know_res.png" style="background-color:white" height=400>
+<img src="https://mmmlab.org/misc/rem_know_res.png" style="background-color:white" height=400>
 <br>
 Figure 3: Single process model fit (remember/know)
+
 </div>
