@@ -34,7 +34,7 @@ EPS         = 1e-10 # a very small value (used for numerical stability)
 NR_THREADS  = 1;    # this is for multithreaded fft
 DELTA_T     = 0.02;# 0.05;  # size of discrete time increment (sec.)
 MAX_T       = 8.0; #ceil(percentile(all_RT,99.5))
-NR_TSTEPS   = MAX_T/DELTA_T; # number of steps along the temporal axis
+NR_TSTEPS   = int(MAX_T/DELTA_T); # number of steps along the temporal axis
 NR_SSTEPS   = 8192; # number of steps along the spatial axis
 NR_SAMPLES  = 10000; # number of trials to use for MC likelihood computation
 
@@ -456,7 +456,7 @@ def predicted_proportions(c,mu_f,d_f,tc_bound,z0,deltaT,t_offset=0,use_fftw=True
         # based on this code, the confidence probabilities should also be in
         # reverse (decreasing order)
         p_old_conf[j-1,to_idx] = p_old[to_idx]*pl.diff(stats.norm.cdf([clims[j],clims[j-1]],\
-                                                    mu_delta,s_delta)); 
+                                                    mu_delta,s_delta)).item(); 
     #######################################
     ## take care of subsequent timesteps ##
     #######################################
@@ -483,7 +483,7 @@ def predicted_proportions(c,mu_f,d_f,tc_bound,z0,deltaT,t_offset=0,use_fftw=True
         s_delta = pl.sqrt(2*d_f*deltaT);
         
         for j in range(1,len(clims)):
-            p_old_conf[j-1,i] = p_old[i]*pl.diff(stats.norm.cdf([clims[j],clims[j-1]],mu_delta,s_delta));
+            p_old_conf[j-1,i] = p_old[i]*pl.diff(stats.norm.cdf([clims[j],clims[j-1]],mu_delta,s_delta)).item();
     return p_old_conf,p_new,t;
 
 # This is a Monte-Carlo simulation approach to approximating the same RT distributions
@@ -514,7 +514,7 @@ def predicted_proportions_sim(c,mu_f,d_f,tc_bound,z0,deltaT,t_offset=0):
     delta_pos = stats.norm.rvs(mu_f*DELTA_T,sigma,size=(NR_SAMPLES,NR_TSTEPS));
     # for timesteps before t_offset, we're not accumulating any information
     # therefore set the delta_pos for these timesteps to 0
-    delta_pos[:to_idx] = 0;
+    delta_pos[:, :to_idx] = 0;
     # 2. Use cumsum to compute absolute positions from delta_pos
     positions = pl.cumsum(delta_pos,1)+z0;
     # 3. Now loop through each sample trial to compute decisions and resp times
@@ -524,7 +524,8 @@ def predicted_proportions_sim(c,mu_f,d_f,tc_bound,z0,deltaT,t_offset=0):
     
     for i, pos in enumerate(positions):
         # Find the index where the position first crosses a boundary (i.e., 1 or -1)
-        cross_indices = pl.find(abs(pos)>=bound);
+        # Cannot make decision until t_offset
+        cross_indices = pl.nonzero((abs(pos)>=bound) & (t > t_offset))[0];
         if len(cross_indices):
             cross_idx = cross_indices[0]; # take the first index
         else: # i.e., if no crossing was found
@@ -545,16 +546,16 @@ def predicted_proportions_sim(c,mu_f,d_f,tc_bound,z0,deltaT,t_offset=0):
     p_old = [];
     for j in range(1,len(clims)):
         # remember that the confidence levels are arranged in decreasing order
-        valid_confs = logical_and(final_pos>clims[j],final_pos<=clims[j-1]);
-        conf_old = logical_and(valid_confs,decisions);
+        valid_confs = pl.logical_and(final_pos>clims[j],final_pos<=clims[j-1]);
+        conf_old = pl.logical_and(valid_confs,decisions);
         old_RTs = resp_times[conf_old];
-        params_old = stats.gamma.fit(old_RTs,floc=0);
+        params_old = stats.gamma.fit(old_RTs,floc=t_offset);
         p_old_conf = stats.gamma.pdf(t,*params_old)*DELTA_T*len(old_RTs)/float(NR_SAMPLES);
         p_old.append(p_old_conf);
         
     p_old = pl.array(p_old);
-    new_RTs = resp_times[logical_not(decisions)];
-    params_new = stats.gamma.fit(new_RTs,floc=0);
+    new_RTs = resp_times[pl.logical_not(decisions)];
+    params_new = stats.gamma.fit(new_RTs,floc=t_offset);
     p_new = stats.gamma.pdf(t,*params_new)*DELTA_T*len(new_RTs)/float(NR_SAMPLES);
     return p_old,p_new,t;
 
