@@ -21,6 +21,19 @@ NR_BINS = 5  # 5 confidence bins as discussed
 # predicted_proportions_revised(*params_old)
 # predicted_proportions_revised(*params_new)
 
+def get_rect_prob(rv, low, high):
+    """
+    Get probability of a random variable in a rectangle
+    """
+    pts = pl.array([
+        [high[0], high[1]],
+        [low[0],  high[1]],
+        [high[0], low[1]],
+        [low[0],  low[1]]
+    ])
+    p = rv.cdf(pts)
+    return p[0] - p[1] - p[2] + p[3]
+
 
 def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0=0):
     """
@@ -106,6 +119,7 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
     s2_comb_delta = s2_r_delta + s2_r_delta
     mu_mvn    = pl.array([mu_r_delta, mu_comb_delta])
     sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
+    mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
 
     #For each confidence band, integrates the bivariate normal over the know rectangle and the remember rectangle, 
     #multiplied by p_old[to_idx] to get joint probability of crossing and landing in the category
@@ -114,8 +128,8 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
         KUL = pl.array([r_bound,    clims[j - 1]])
         RLL = pl.array([r_bound,    clims[j]])
         RUL = pl.array([INF_PROXY,  clims[j - 1]])
-        p_know_conf[j-1, to_idx] = p_old[to_idx] * stats._mvn.mvnun(KLL, KUL, mu_mvn, sigma_mvn)[0]
-        p_rem_conf [j-1, to_idx] = p_old[to_idx] * stats._mvn.mvnun(RLL, RUL, mu_mvn, sigma_mvn)[0]
+        p_know_conf[j-1, to_idx] = p_old[to_idx] * get_rect_prob(mvn_dist, KLL, KUL)
+        p_rem_conf [j-1, to_idx] = p_old[to_idx] * get_rect_prob(mvn_dist, RLL, RUL)
 
     #######################################
     ## take care of subsequent timesteps ##
@@ -148,6 +162,7 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
         s2_comb_delta = s2_r_delta + s2_r_delta
         mu_mvn    = pl.array([mu_r_delta, mu_comb_delta])
         sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
+        mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
 
         #same thing as for the loop in the first time step
         for j in range(1, len(clims)):
@@ -155,8 +170,8 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
             KUL = pl.array([r_bound,    clims[j - 1]])
             RLL = pl.array([r_bound,    clims[j]])
             RUL = pl.array([INF_PROXY,  clims[j - 1]])
-            p_know_conf[j-1, i] = p_old[i] * stats._mvn.mvnun(KLL, KUL, mu_mvn, sigma_mvn)[0]
-            p_rem_conf [j-1, i] = p_old[i] * stats._mvn.mvnun(RLL, RUL, mu_mvn, sigma_mvn)[0]
+            p_know_conf[j-1, i] = p_old[i] * get_rect_prob(mvn_dist, KLL, KUL)
+            p_rem_conf [j-1, i] = p_old[i] * get_rect_prob(mvn_dist, RLL, RUL)
 
 
     #sums over the confidence dimension, giving the marginal RT distribution for remember and know responses regardless of confidence level
