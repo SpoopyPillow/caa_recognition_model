@@ -107,7 +107,7 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
     mu_mvn    = pl.array([mu_r_delta, mu_comb_delta])
     sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
 
-    #For each confidence band, integratees the bivariate normal over the know rectangle and the remember rectangle, 
+    #For each confidence band, integrates the bivariate normal over the know rectangle and the remember rectangle, 
     #multiplied by p_old[to_idx] to get joint probability of crossing and landing in the category
     for j in range(1, len(clims)):
         KLL = pl.array([-INF_PROXY, clims[j]])
