@@ -94,84 +94,59 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
     ## take care of the first timestep        ##
     ############################################
 
-    #seeds the particle distribution at t0 and convernts the probability density into probability mass per grid cell
-    #the sigma_init here widens the distributio we pull from, since different trials can start at differfent starting points drawn from N(z0, sigma_z0)
     sigma_init = pl.sqrt(sigma**2 + sigma_z0**2)
     tx[to_idx] = stats.norm.pdf(x, mu + z0, sigma_init) * delta_s
-    
-    #any particles that crossed a boundary already (on the first step) are recorded as immediate old/new responses
-    p_old[to_idx] = pl.sum(tx[to_idx][x >=  bound[to_idx]])
-    p_new[to_idx] = pl.sum(tx[to_idx][x <= -bound[to_idx]])
 
-    #expected accumulator positions given the particle just crossed bound[to_idx], here rh=1 and mu_f=0 so this equation reduces
-    mu_r_cond = mu_r * t[to_idx] + (bound[to_idx] - t[to_idx] * mu_r - z0)
+    # 2. Run a single loop for ALL timesteps
+    for i in range(to_idx, len(t)):
+        # Only convolve for steps AFTER the first one
+        if i > to_idx:
+            tx[i] = abs(pl.ifftshift(fftw.ifft(fftw.fft(tx[i-1]) * ft_kernel)))
 
-    #zeroes out particles that already crossed so they don't contribute to future steps
-    tx[to_idx] *= (abs(x) < bound[to_idx])
-
-    #Expected position of accumulator after deltaT more seconds (for the recollection dimension and the combined dimension)
-    mu_r_delta    = mu_r_cond + mu_r * deltaT
-    mu_comb_delta = mu_r * deltaT + bound[to_idx]
-
-    #Variance of the accumulator after deltaT 
-    s2_r_delta    = EPS**2 + 2 * d * deltaT
-    cov_delta     = s2_r_delta
-    s2_comb_delta = s2_r_delta + s2_r_delta
-    mu_mvn    = pl.array([mu_r_delta, mu_comb_delta])
-    sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
-    mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
-
-    #For each confidence band, integrates the bivariate normal over the know rectangle and the remember rectangle, 
-    #multiplied by p_old[to_idx] to get joint probability of crossing and landing in the category
-    for j in range(1, len(clims)):
-        KLL = pl.array([-INF_PROXY, clims[j]])
-        KUL = pl.array([r_bound,    clims[j - 1]])
-        RLL = pl.array([r_bound,    clims[j]])
-        RUL = pl.array([INF_PROXY,  clims[j - 1]])
-        p_know_conf[j-1, to_idx] = p_old[to_idx] * get_rect_prob(mvn_dist, KLL, KUL)
-        p_rem_conf [j-1, to_idx] = p_old[to_idx] * get_rect_prob(mvn_dist, RLL, RUL)
-
-    #######################################
-    ## take care of subsequent timesteps ##
-    #######################################
-    for i in range(to_idx + 1, len(t)):
-        #convolves previous step's particle distribution with the diffusion kernel
-        tx[i] = abs(pl.ifftshift(fftw.ifft(fftw.fft(tx[i-1]) * ft_kernel)))
-
-        #Extracts the particles that crossed the upper boundary on this step, comb_est is the the expectation of a particle
-        #given that it crossed the upper boundary
+        # Extract particles that crossed boundaries
         p_pos    = tx[i][x >=  bound[i]]
-        x_pos    = x[x >= bound[i]]
-        comb_est = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
-
-        #Total probability mass crossing the upper boundary for old and new responses
         p_old[i] = pl.sum(p_pos)
         p_new[i] = pl.sum(tx[i][x <= -bound[i]])
 
-        #Expected accumulator position given crossing at comb_est
-        mu_r_cond = mu_r * t[i] + (comb_est - t[i] * mu_r - z0)
+        # Handle the slight mathematical differences between step 1 and the rest
+        if i == to_idx:
+            # Step 1: Crossing is exactly on the boundary, add EPS to variance
+            crossing_val = bound[to_idx]
+            extra_var    = EPS**2
+        else:
+            # Rest: Calculate expected crossing position, no extra variance
+            x_pos        = x[x >= bound[i]]
+            crossing_val = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
+            extra_var    = 0.0
 
-        #Zeroes out particles that already crossed the boundary
-        tx[i] *= (abs(x) < bound[i])
+        # Expected accumulator positions
+        mu_r_cond = mu_r * t[i] + (crossing_val - t[i] * mu_r - z0)
 
-        #Expected position of accumulator after deltaT more seconds (for the recollection dimension and the combined dimension)
+        # Expected position of accumulator after deltaT
         mu_r_delta    = mu_r_cond + mu_r * deltaT
-        mu_comb_delta = mu_r * deltaT + comb_est
-        s2_r_delta    = 2 * d * deltaT
+        mu_comb_delta = mu_r * deltaT + crossing_val
+
+        # Variance of the accumulator after deltaT 
+        s2_r_delta    = extra_var + 2 * d * deltaT
         cov_delta     = s2_r_delta
         s2_comb_delta = s2_r_delta + s2_r_delta
+        
         mu_mvn    = pl.array([mu_r_delta, mu_comb_delta])
         sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
-        mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
+        mvn_dist  = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
 
-        #same thing as for the loop in the first time step
+        # Calculate confidence bin distributions
         for j in range(1, len(clims)):
             KLL = pl.array([-INF_PROXY, clims[j]])
             KUL = pl.array([r_bound,    clims[j - 1]])
             RLL = pl.array([r_bound,    clims[j]])
             RUL = pl.array([INF_PROXY,  clims[j - 1]])
+            
             p_know_conf[j-1, i] = p_old[i] * get_rect_prob(mvn_dist, KLL, KUL)
             p_rem_conf [j-1, i] = p_old[i] * get_rect_prob(mvn_dist, RLL, RUL)
+
+        # Zero out particles that already crossed the boundary
+        tx[i] *= (abs(x) < bound[i])
 
 
     #sums over the confidence dimension, giving the marginal RT distribution for remember and know responses regardless of confidence level
