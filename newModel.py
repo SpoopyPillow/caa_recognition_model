@@ -96,33 +96,30 @@ def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigm
             x_pos = x[x >= bound[i]]
             crossing_val = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
 
-        # Amount of recollection evidence accumulated
-        mu_r_cond = crossing_val - z0
-
-        # Expected position of accumulator after deltaT
-        mu_r_delta = mu_r_cond + mu_r * deltaT
-        mu_comb_delta = mu_r * deltaT + crossing_val
-
-        # Variance of the accumulator after deltaT
-        s2_r_delta = 2 * d * deltaT
-        cov_delta = s2_r_delta
-        s2_comb_delta = s2_r_delta + s2_r_delta
-
-        mu_mvn = pl.array([mu_r_delta, mu_comb_delta])
-        sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
-        mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
-
-        # Calculate confidence bin distributions
-        for j in range(1, len(clims)):
-            KLL = pl.array([-INF_PROXY, clims[j]])
-            KUL = pl.array([r_bound, clims[j - 1]])
-            RLL = pl.array([r_bound, clims[j]])
-            RUL = pl.array([INF_PROXY, clims[j - 1]])
-
-            p_know_conf[j - 1, i] = p_old[i] * get_rect_prob(mvn_dist, KLL, KUL)
-            p_rem_conf[j - 1, i] = p_old[i] * get_rect_prob(mvn_dist, RLL, RUL)
-
         # Zero out particles that already crossed the boundary
         tx[i] *= abs(x) < bound[i]
+
+        # Mean and SD of accumulator after deltaT
+        mu_delta = crossing_val + mu_r * deltaT
+        std_delta = pl.sqrt(2 * d * deltaT)
+
+        # Distribution of accumulator after deltaT
+        dist = stats.norm(loc=mu_delta, scale=std_delta)
+
+        for j in range(1, len(clims)):
+            c_upper = clims[j - 1]
+            c_lower = clims[j]
+
+            # Remember portion
+            rem_lower = max(c_lower, r_bound)
+            rem_upper = c_upper
+            if rem_upper > rem_lower:
+                p_rem_conf[j - 1, i] = p_old[i] * (dist.cdf(rem_upper) - dist.cdf(rem_lower))
+
+            # Know portion
+            know_lower = c_lower
+            know_upper = min(c_upper, r_bound)
+            if know_upper > know_lower:
+                p_know_conf[j - 1, i] = p_old[i] * (dist.cdf(know_upper) - dist.cdf(know_lower))
 
     return p_rem_conf, p_know_conf, p_new, t
