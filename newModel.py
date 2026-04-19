@@ -1,19 +1,19 @@
 import pylab as pl
 from scipy import stats
 from . import fftw_test as fftw
-from .multinomial_funcs import multinom_loglike,chi_square_gof, get_rect_prob
+from .multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
 
 NR_BINS = 5  # 5 confidence bins as discussed
-INF_PROXY   = 10; # a value used to provide very large but finite bounds for mvn integration
-EPS         = 1e-10 # a very small value (used for numerical stability)
-NR_THREADS  = 1;    # this is for multithreaded fft
-DELTA_T     = 0.025;  # size of discrete time increment (sec.)
-MAX_T       = 8.0; #ceil(percentile(all_RT,99.5))
-NR_TSTEPS   = int(MAX_T/DELTA_T);
-NR_SSTEPS   = 8192;
-NR_SAMPLES  = 10000; # number of trials to use for MC likelihood computation
+INF_PROXY = 10  # a value used to provide very large but finite bounds for mvn integration
+EPS = 1e-10  # a very small value (used for numerical stability)
+NR_THREADS = 1  # this is for multithreaded fft
+DELTA_T = 0.025  # size of discrete time increment (sec.)
+MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
+NR_TSTEPS = int(MAX_T / DELTA_T)
+NR_SSTEPS = 8192
+NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
 
-NR_QUANTILES=10;
+NR_QUANTILES = 10
 
 
 def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0=0):
@@ -36,52 +36,50 @@ def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigm
     sigma_z0       : variability in percieved familiarity across trials
     """
 
-    # creating bin edges
+    # Create confidence bins
     c = pl.array(c, ndmin=1)
     n = len(c)
     clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
 
-    # remember criterion position
+    # Set remember criterion position
     r_bound = z0 + r_bound_offset
 
-    # standard deviation and mean drift of the accumulator per-step
+    # Standard deviation and mean drift of the accumulator per-step
     sigma = pl.sqrt(2 * d * DELTA_T)
     mu = mu_r * DELTA_T
 
-    # making the time axis, to_idx is the index of the first time step
+    # Create the time axis, where to_idx is the index of the first time step
     t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
     to_idx = pl.argmin((t - t0) ** 2)
+    # Bound is the collapsing boundary at each time point
     bound = pl.exp(-tc_bound * pl.clip(t - t0, 0, None))
-    # bound is the collapsing boundary at each time point
 
-    # making the grid for the accumulator
+    # Create the grid for the accumulator
     space_lim = max(bound) + 3 * sigma
     delta_s = 2 * space_lim / NR_SSTEPS
     x = pl.linspace(-space_lim, space_lim, NR_SSTEPS)
 
-    # diffusion kernel pre-fft'd
+    # Kernel is the probability mass function for each step
     kernel = stats.norm.pdf(x, mu, sigma) * delta_s
+    # FFT to prepare for convolution
     ft_kernel = fftw.fft(kernel)
 
-    # initializing output arrays
+    # Initializing output arrays
+    tx = pl.zeros((len(t), len(x)))  # RT distribution at each time point
+    p_old = pl.zeros(pl.shape(t))  # Probability mass hitting upper collapsing bound at each time point
+    p_new = pl.zeros(pl.shape(t))  # Probability mass hitting lower collapsing bound at each time point
+    p_rem_conf = pl.zeros((n + 1, pl.size(t)))  # Yes responses that are remember (cross r_bound)
+    p_know_conf = pl.zeros((n + 1, pl.size(t))) # Yes responses that are known (does not cross r_bound)
 
-    tx = pl.zeros((len(t), len(x)))
-    p_old = pl.zeros(pl.shape(t))
-    p_new = pl.zeros(pl.shape(t))
-    p_rem_conf = pl.zeros((n + 1, pl.size(t)))
-    p_know_conf = pl.zeros((n + 1, pl.size(t)))
-
-    ############################################
-    ## take care of the first timestep        ##
-    ############################################
-
+    # Initialize the probability mass distribution of the first time step
     sigma_init = pl.sqrt(sigma**2 + sigma_z0**2)
     tx[to_idx] = stats.norm.pdf(x, mu + z0, sigma_init) * delta_s
 
-    # 2. Run a single loop for ALL timesteps
+    # Iterate through each time step
     for i in range(to_idx, len(t)):
         # Only convolve for steps AFTER the first one
         if i > to_idx:
+            # Uses convolution to advance the probability mass distribution by one step
             tx[i] = abs(pl.ifftshift(fftw.ifft(fftw.fft(tx[i - 1]) * ft_kernel)))
 
         # Extract particles that crossed boundaries
@@ -89,26 +87,24 @@ def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigm
         p_old[i] = pl.sum(p_pos)
         p_new[i] = pl.sum(tx[i][x <= -bound[i]])
 
-        # Handle the slight mathematical differences between step 1 and the rest
+        # Different calculation on first step
         if i == to_idx:
-            # Step 1: Crossing is exactly on the boundary, add EPS to variance
+            # Crossing is exactly on the boundary
             crossing_val = bound[to_idx]
-            extra_var = EPS**2
         else:
-            # Rest: Calculate expected crossing position, no extra variance
+            # Calculate expected crossing position
             x_pos = x[x >= bound[i]]
             crossing_val = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
-            extra_var = 0.0
 
-        # Expected accumulator positions
-        mu_r_cond = mu_r * t[i] + (crossing_val - t[i] * mu_r - z0)
+        # Amount of recollection evidence accumulated
+        mu_r_cond = crossing_val - z0
 
         # Expected position of accumulator after deltaT
         mu_r_delta = mu_r_cond + mu_r * deltaT
         mu_comb_delta = mu_r * deltaT + crossing_val
 
         # Variance of the accumulator after deltaT
-        s2_r_delta = extra_var + 2 * d * deltaT
+        s2_r_delta = 2 * d * deltaT
         cov_delta = s2_r_delta
         s2_comb_delta = s2_r_delta + s2_r_delta
 
