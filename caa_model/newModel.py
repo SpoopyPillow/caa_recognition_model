@@ -1,7 +1,15 @@
+import shelve
+from collections import namedtuple
 import pylab as pl
 from scipy import stats
 from . import fftw_test as fftw
 from .multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
+
+data_path = "caa_model/data/"
+
+db = shelve.open(data_path + "neha_data.dat", "r")
+DATA = db["empirical_results"]
+db.close()
 
 NR_BINS = 5  # 5 confidence bins as discussed
 INF_PROXY = 10  # a value used to provide very large but finite bounds for mvn integration
@@ -14,6 +22,37 @@ NR_SSTEPS = 8192
 NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
 
 NR_QUANTILES = 10
+
+CAA_Params = namedtuple(
+    "CAA_Params",
+    [
+        "c",  # High confidence boundary
+        "mu_t",  # Target drift
+        "mu_l",  # Lure drift
+        "d",  # Diffusion constant
+        "tc_bound",  # Boundary collapse rate
+        "r_bound_offset",  # Remember boundary offset
+        "z0_t",  # Target starting point
+        "z0_l",  # Lure starting point
+        "deltaT",  # Post-decision accumulation time
+        "sigma_z0",  # Starting position variability
+        "t0",  # Non-decision time
+    ],
+)
+
+param_bounds = CAA_Params(
+    c=(0.0, 2.0),
+    mu_t=(0.0, 2.0),
+    mu_l=(0.0, 1.0),
+    d=(EPS, 1.0),
+    tc_bound=(0.0, 1.0),
+    r_bound_offset=(0.0, 1.0),
+    z0_t=(-2.0, 2.0),
+    z0_l=(-2.0, 2.0),
+    deltaT=(EPS, 2.0),
+    sigma_z0=(EPS, 1.0),
+    t0=(0.0, 0.5),
+)
 
 
 def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0=0):
@@ -69,7 +108,7 @@ def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigm
     p_old = pl.zeros(pl.shape(t))  # Probability mass hitting upper collapsing bound at each time point
     p_new = pl.zeros(pl.shape(t))  # Probability mass hitting lower collapsing bound at each time point
     p_rem_conf = pl.zeros((n + 1, pl.size(t)))  # Yes responses that are remember (cross r_bound)
-    p_know_conf = pl.zeros((n + 1, pl.size(t))) # Yes responses that are known (does not cross r_bound)
+    p_know_conf = pl.zeros((n + 1, pl.size(t)))  # Yes responses that are known (does not cross r_bound)
 
     # Initialize the probability mass distribution of the first time step
     sigma_init = pl.sqrt(sigma**2 + sigma_z0**2)
