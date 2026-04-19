@@ -1,7 +1,7 @@
 import shelve
 from collections import namedtuple
 import pylab as pl
-from scipy import stats
+from scipy import stats, optimize
 from . import fftw_test as fftw
 from .multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
 
@@ -20,8 +20,11 @@ MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
 NR_TSTEPS = int(MAX_T / DELTA_T)
 NR_SSTEPS = 8192
 NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
+NR_WORKERS = 8  # Number of cores for optimizing parameters
 
 NR_QUANTILES = 10
+
+fftw.fftw_setup(pl.zeros(NR_SSTEPS), NR_THREADS)
 
 CAAParams = namedtuple(
     "CAAParams",
@@ -53,6 +56,24 @@ param_bounds = CAAParams(
     sigma_z0=(EPS, 1.0),
     t0=(0.0, 0.5),
 )
+
+
+def find_ml_params_all(quantiles=NR_QUANTILES):
+    """
+    Does a global maximum-likelihood parameter search, constrained by the bounds
+    listed in param_bounds, and returns the result. Each RT distribution (i.e.,
+    for each judgment category and confidence level) is represented using the
+    number of quantiles specified by the 'quantiles' parameter.
+    """
+    return optimize.differential_evolution(
+        compute_gof_all,
+        param_bounds,
+        args=(quantiles, DATA),
+        workers=NR_WORKERS,
+        updating="deferred",
+        strategy="best1bin",
+        disp=True
+    )
 
 
 def compute_gof_all(model_params, quantiles=NR_QUANTILES, data=DATA, use_chisq=True):
