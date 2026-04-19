@@ -28,3 +28,11 @@ def chi_square_gof(x,n,p):
     """
     p = pl.clip(p,EPS,None);
     return sum((x-n*p)**2/(n*p));
+
+def get_rect_prob(rv, low, high):
+    """
+    Get probability of a random variable in a rectangle.
+    """
+    pts = pl.array([[high[0], high[1]], [low[0], high[1]], [high[0], low[1]], [low[0], low[1]]])
+    p = rv.cdf(pts)
+    return p[0] - p[1] - p[2] + p[3]

@@ -1,37 +1,22 @@
-from caa_model import dual_process as dp
-from caa_model.dual_process import compute_model_gof
-from caa_model.dual_process import predicted_proportions_sim as pps
-from caa_model.dual_process import predicted_proportions as pp
-import matplotlib.pyplot as plt
-import numpy as np
-import yaml
-import pandas as pd
-
-from caa_model.dual_process import INF_PROXY, EPS, DELTA_T, MAX_T, NR_TSTEPS, NR_SSTEPS
-from caa_model import fftw_test as fftw
 import pylab as pl
 from scipy import stats
+from . import fftw_test as fftw
+from .multinomial_funcs import multinom_loglike,chi_square_gof, get_rect_prob
 
 NR_BINS = 5  # 5 confidence bins as discussed
+INF_PROXY   = 10; # a value used to provide very large but finite bounds for mvn integration
+EPS         = 1e-10 # a very small value (used for numerical stability)
+NR_THREADS  = 1;    # this is for multithreaded fft
+DELTA_T     = 0.025;  # size of discrete time increment (sec.)
+MAX_T       = 8.0; #ceil(percentile(all_RT,99.5))
+NR_TSTEPS   = int(MAX_T/DELTA_T);
+NR_SSTEPS   = 8192;
+NR_SAMPLES  = 10000; # number of trials to use for MC likelihood computation
 
-# Same calling method as before, you would have something like
-# params_old = [c, mu_r, d_t, tc_bound, r_bound_offset,  z0, deltaT, t0]
-# params_new = [c, mu_r_lure, d_l, tc_bound, r_bound_offset, -z0, deltaT, t0]
-
-# predicted_proportions_revised(*params_old)
-# predicted_proportions_revised(*params_new)
-
-
-def get_rect_prob(rv, low, high):
-    """
-    Get probability of a random variable in a rectangle
-    """
-    pts = pl.array([[high[0], high[1]], [low[0], high[1]], [high[0], low[1]], [low[0], low[1]]])
-    p = rv.cdf(pts)
-    return p[0] - p[1] - p[2] + p[3]
+NR_QUANTILES=10;
 
 
-def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0=0):
+def predicted_proportions(c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0=0):
     """
     Revised single-accumulator DISP CAA model (Glass, 2026).
 
@@ -143,11 +128,5 @@ def predicted_proportions_revised(c, mu_r, d, tc_bound, r_bound_offset, z0, delt
 
         # Zero out particles that already crossed the boundary
         tx[i] *= abs(x) < bound[i]
-
-    # sums over the confidence dimension, giving the marginal RT distribution for remember and know responses regardless of confidence level
-    # these were computed but unused in the original old model implimentation, so I'm leaving it here
-
-    # p_remember = p_rem_conf.sum(0)
-    # p_know     = p_know_conf.sum(0)
 
     return p_rem_conf, p_know_conf, p_new, t

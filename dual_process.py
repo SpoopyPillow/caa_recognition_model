@@ -10,7 +10,7 @@ from scipy import stats
 from scipy import optimize
 # local imports
 from . import fftw_test as fftw
-from .multinomial_funcs import multinom_loglike,chi_square_gof
+from .multinomial_funcs import multinom_loglike,chi_square_gof, get_rect_prob
 
 data_path = 'caa_model/data/'; # this is the base path for the data files
 
@@ -391,6 +391,7 @@ def predicted_proportions(c,mu_r,mu_f,d_r,d_f,tc_bound,r_bound,z0,deltaT,
     cov_delta = s2_r_delta;
     mu_mvn = pl.array([mu_r_delta,mu_comb_delta]);
     sigma_mvn = pl.array([[s2_r_delta,cov_delta],[cov_delta,s2_comb_delta]]);
+    mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
     ############################################################################
     for j in range(1,len(clims)):
         # Note that the clims appear in descending order, from highest to lowest value
@@ -398,8 +399,8 @@ def predicted_proportions(c,mu_r,mu_f,d_r,d_f,tc_bound,r_bound,z0,deltaT,
         KUL = pl.array([r_bound,clims[j-1]]);      # upper limit for 'know' class
         RLL = pl.array([r_bound,clims[j]]);        # lower limit for 'remember' class
         RUL = pl.array([INF_PROXY,clims[j-1]]);    # upper limit for 'remember' class
-        p_know_conf[j-1,to_idx] = p_old[to_idx]*stats.mvn.mvnun(KLL,KUL,mu_mvn,sigma_mvn)[0];
-        p_rem_conf[j-1,to_idx] = p_old[to_idx]*stats.mvn.mvnun(RLL,RUL,mu_mvn,sigma_mvn)[0];
+        p_know_conf[j-1,to_idx] = p_old[to_idx]*get_rect_prob(mvn_dist, KLL, KUL)
+        p_rem_conf[j-1,to_idx] = p_old[to_idx]*get_rect_prob(mvn_dist, RLL, RUL)
         
     #######################################
     ## take care of subsequent timesteps ##
@@ -457,6 +458,7 @@ def predicted_proportions(c,mu_r,mu_f,d_r,d_f,tc_bound,r_bound,z0,deltaT,
         cov_delta = s2_r_delta;
         mu_mvn = pl.array([mu_r_delta,mu_comb_delta]);
         sigma_mvn = pl.array([[s2_r_delta,cov_delta],[cov_delta,s2_comb_delta]]);
+        mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
         ########################################################################
         # Test Code:
         #if(t[i]>0.5):
@@ -476,8 +478,8 @@ def predicted_proportions(c,mu_r,mu_f,d_r,d_f,tc_bound,r_bound,z0,deltaT,
             KUL = pl.array([r_bound,clims[j-1]]);
             RLL = pl.array([r_bound,clims[j]]);
             RUL = pl.array([INF_PROXY,clims[j-1]]);
-            p_know_conf[j-1,i] = p_old[i]*stats.mvn.mvnun(KLL,KUL,mu_mvn,sigma_mvn)[0];
-            p_rem_conf[j-1,i] = p_old[i]*stats.mvn.mvnun(RLL,RUL,mu_mvn,sigma_mvn)[0];
+            p_know_conf[j-1,i] = p_old[i]*get_rect_prob(mvn_dist, KLL, KUL)
+            p_rem_conf[j-1,i] = p_old[i]*get_rect_prob(mvn_dist, RLL, RUL)
         
     # compute the marginal distributions for remember and know (i.e., across all confidence levels)
     p_remember = p_rem_conf.sum(0);
