@@ -1,6 +1,4 @@
-######################################
-### Files that git-add should ignore
-
+.venv
 *.pyc
 *.py~
 *.mat
