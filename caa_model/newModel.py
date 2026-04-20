@@ -57,6 +57,21 @@ param_bounds = CAAParams(
     t0=(0.0, 0.5),
 )
 
+# Parameters obtained from using 10 quantiles
+params_est = CAAParams(
+    1.7802366345277048,
+    1.0732968669582117,
+    0.17804995041166943,
+    0.5326415575619126,
+    0.043589790458315514,
+    0.9574460424899932,
+    -0.690027580392909,
+    -0.565893039286282,
+    1.5546604244949078,
+    0.12666843828878627,
+    0.46706560655302104,
+)
+
 
 def find_ml_params_all(quantiles=NR_QUANTILES):
     """
@@ -72,8 +87,18 @@ def find_ml_params_all(quantiles=NR_QUANTILES):
         workers=NR_WORKERS,
         updating="deferred",
         strategy="best1bin",
-        disp=True
+        disp=True,
     )
+
+
+def find_ml_params_all_lm(quantiles=NR_QUANTILES):
+    """
+    Computes MLE of params using a local (fast) and unconstrained optimization
+    algorithm. Each RT distribution (i.e., for each judgment category and
+    confidence level) is represented using the number of quantiles specified by
+    the 'quantiles' parameter.
+    """
+    return optimize.fmin(compute_gof_all, params_est, args=(quantiles, DATA), disp=True)
 
 
 def compute_gof_all(model_params, quantiles=NR_QUANTILES, data=DATA, use_chisq=True):
