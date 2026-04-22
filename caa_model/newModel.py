@@ -73,7 +73,7 @@ params_est = CAAParams(
 )
 
 
-def find_ml_params_all(quantiles=NR_QUANTILES):
+def find_ml_params_all(quantiles=NR_QUANTILES, use_chisq=True):
     """
     Does a global maximum-likelihood parameter search, constrained by the bounds
     listed in param_bounds, and returns the result. Each RT distribution (i.e.,
@@ -83,7 +83,7 @@ def find_ml_params_all(quantiles=NR_QUANTILES):
     return optimize.differential_evolution(
         compute_gof_all,
         param_bounds,
-        args=(quantiles, DATA),
+        args=(quantiles, DATA, use_chisq),
         workers=NR_WORKERS,
         updating="deferred",
         strategy="best1bin",
@@ -91,14 +91,14 @@ def find_ml_params_all(quantiles=NR_QUANTILES):
     )
 
 
-def find_ml_params_all_lm(quantiles=NR_QUANTILES):
+def find_ml_params_all_lm(quantiles=NR_QUANTILES, use_chisq=True):
     """
     Computes MLE of params using a local (fast) and unconstrained optimization
     algorithm. Each RT distribution (i.e., for each judgment category and
     confidence level) is represented using the number of quantiles specified by
     the 'quantiles' parameter.
     """
-    return optimize.fmin(compute_gof_all, params_est, args=(quantiles, DATA), disp=True)
+    return optimize.fmin(compute_gof_all, params_est, args=(quantiles, DATA, use_chisq), disp=True)
 
 
 def compute_gof_all(model_params, quantiles=NR_QUANTILES, data=DATA, use_chisq=True):
