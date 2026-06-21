@@ -5,7 +5,7 @@ from scipy import stats, optimize
 from ..utils import fftw_test as fftw
 from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
 
-data_path = "caa_model/data/"
+data_path = "data/"
 
 db = shelve.open(data_path + "neha_data.dat", "r")
 DATA = db["empirical_results"]

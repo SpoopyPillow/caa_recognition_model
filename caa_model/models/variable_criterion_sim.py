@@ -75,7 +75,7 @@ params_est = DPMParams(
 )
 
 
-data_path = "caa_model/data/"
+data_path = "data/"
 # this is the base path for the data files
 
 # Mengxue: Read in new Vincentized RT data

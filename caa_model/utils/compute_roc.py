@@ -18,8 +18,8 @@ from scipy.integrate import trapz
 # third party imports
 import yaml
 
-EXPT1_FILENAME = "caa_model/data/neha_data_revised.yml"
-EXPT2_FILENAME = "caa_model/data/mengxue_data.yml"
+EXPT1_FILENAME = "data/neha_data_revised.yml"
+EXPT2_FILENAME = "data/mengxue_data.yml"
 
 Phi = stats.norm.cdf
 invPhi = stats.norm.ppf

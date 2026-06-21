@@ -16,7 +16,7 @@ from ..utils import fftw_test as fftw
 from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof
 import matplotlib.pyplot as plt
 
-data_path = "caa_model/data/"  # this is the base path for the data files
+data_path = "data/"  # this is the base path for the data files
 
 ## Start by reading in the data.
 # the reason to do this first is that, in order to be efficient,

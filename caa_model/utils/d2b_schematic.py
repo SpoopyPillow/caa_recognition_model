@@ -19,7 +19,7 @@ pl.rcParams["legend.frameon"] = "False"
 pl.rcParams["font.family"] = "Arial"
 pl.rcParams["font.size"] = 16.0
 
-data_path = "caa_model/data/"
+data_path = "data/"
 # this is the base path for the data files
 
 ## Start by reading in the data.
