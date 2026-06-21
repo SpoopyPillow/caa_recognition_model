@@ -2,8 +2,8 @@ import shelve
 from collections import namedtuple
 import pylab as pl
 from scipy import stats, optimize
-from . import fftw_test as fftw
-from .multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
+from ..utils import fftw_test as fftw
+from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
 
 data_path = "caa_model/data/"
 
