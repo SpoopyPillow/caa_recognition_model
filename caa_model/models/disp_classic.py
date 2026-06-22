@@ -12,6 +12,7 @@ from scipy import stats
 from scipy import optimize
 
 # local imports
+from ..config import CAAConfig, CAA_CFG, EPS, INF_PROXY
 from ..utils import fftw_test as fftw
 from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
 
@@ -28,18 +29,16 @@ DATA = db["empirical_results"]
 db.close()
 
 
-INF_PROXY = 10  # a value used to provide very large but finite bounds for mvn integration
-EPS = 1e-10  # a very small value (used for numerical stability)
-NR_THREADS = 1  # this is for multithreaded fft
-DELTA_T = 0.025  # size of discrete time increment (sec.)
-MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
-NR_TSTEPS = int(MAX_T / DELTA_T)
-NR_SSTEPS = 8192
-NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
+# NR_THREADS = 1  # this is for multithreaded fft
+# DELTA_T = 0.025  # size of discrete time increment (sec.)
+# MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
+# NR_TSTEPS = int(MAX_T / DELTA_T)
+# NR_SSTEPS = 8192
+# NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
 
-NR_QUANTILES = 10
+# NR_QUANTILES = 10
 
-fftw.fftw_setup(pl.zeros(NR_SSTEPS), NR_THREADS)
+fftw.fftw_setup(pl.zeros(CAA_CFG.nr_ssteps), CAA_CFG.nr_threads)
 
 # 12/24/2016: modified (for flexibility) to use named tuple instead of list
 # DPMParams defines the overall parametrs for the set of old and new words
@@ -75,7 +74,7 @@ param_bounds = DPMParams(
 )
 
 
-def find_ml_params_all(quantiles=NR_QUANTILES):
+def find_ml_params_all(quantiles=CAA_CFG.nr_quantiles):
     """
     does a global maximum-likelihood parameter search, constrained by the bounds
     listed in param_bounds, and returns the result. Each RT distribution (i.e.,
@@ -86,7 +85,7 @@ def find_ml_params_all(quantiles=NR_QUANTILES):
     return optimize.differential_evolution(obj_func, param_bounds)
 
 
-def find_ml_params_all_lm(quantiles=NR_QUANTILES, spm=False):
+def find_ml_params_all_lm(quantiles=CAA_CFG.nr_quantiles, spm=False):
     """
     computes MLE of params using a local (fast) and unconstrained optimization
     algorithm. Each RT distribution (i.e., for each judgment category and
@@ -101,7 +100,7 @@ def find_ml_params_all_lm(quantiles=NR_QUANTILES, spm=False):
         return optimize.fmin(obj_func, params_est)
 
 
-def compute_gof_all(model_params, quantiles=NR_QUANTILES, spm=False, data=DATA, use_chisq=True):
+def compute_gof_all(model_params, quantiles=CAA_CFG.nr_quantiles, spm=False, data=DATA, use_chisq=True):
     """
     computes the overall goodness-of-fit of the model defined by model_params.
     This is the sum of the NLL or chi-square statistics for the distribution
@@ -126,7 +125,7 @@ def compute_gof_all(model_params, quantiles=NR_QUANTILES, spm=False, data=DATA, 
     return res
 
 
-def compute_prob_all(model_params, quantiles=NR_QUANTILES, spm=False, data=DATA):
+def compute_prob_all(model_params, quantiles=CAA_CFG.nr_quantiles, spm=False, data=DATA):
     """
     computes the overall goodness-of-fit of the model defined by model_params.
     This is the sum of the NLL or chi-square statistics for the distribution
@@ -154,7 +153,7 @@ def compute_prob_all(model_params, quantiles=NR_QUANTILES, spm=False, data=DATA)
 
 
 def compute_model_gof(
-    model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, nr_quantiles=NR_QUANTILES, use_chisq=True
+    model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, nr_quantiles=CAA_CFG.nr_quantiles, use_chisq=True
 ):
     # computes the chi square fit of the model to the data
     # compute N, the total number of trials
@@ -199,7 +198,7 @@ def compute_model_gof(
         return -multinom_loglike(x, N, p)
 
 
-def compute_model_prop(model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, nr_quantiles=NR_QUANTILES):
+def compute_model_prop(model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, nr_quantiles=CAA_CFG.nr_quantiles):
     # computes the chi square fit of the model to the data
     # compute N, the total number of trials
     N = len(rem_RTs) + len(know_RTs) + len(new_RTs)
@@ -243,7 +242,7 @@ def compute_model_prop(model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_
     return p_obs, p_pred
 
 
-def compute_model_quantiles(params, nr_quantiles=NR_QUANTILES):
+def compute_model_quantiles(params, nr_quantiles=CAA_CFG.nr_quantiles):
     # This function is set up to deal with multiple confidence levels
     quantile_increment = 1.0 / nr_quantiles
     quantiles = pl.arange(0, 1, quantile_increment)
@@ -282,22 +281,22 @@ def predicted_proportions_spm(c, mu_f, d_f, tc_bound, z0, deltaT, use_fftw=True)
     # form an array consisting of the appropriate (upper) integration limits
     clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
     # compute process SD
-    sigma_f = pl.sqrt(2 * d_f * DELTA_T)
+    sigma_f = pl.sqrt(2 * d_f * CAA_CFG.delta_t)
     sigma = sigma_f
 
-    t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
+    t = pl.linspace(CAA_CFG.delta_t, CAA_CFG.max_t, CAA_CFG.nr_tsteps)
     # this is the time axis
     bound = pl.exp(-tc_bound * t)
     # this is the collapsing bound
 
-    mu = mu_f * DELTA_T
+    mu = mu_f * CAA_CFG.delta_t
     # this is the expected drift over time interval DELTA_T
     # compute the bounding limit of the space domain. This should include at
     # least 99% of the probability mass when the particle is at the largest possible bound
     space_lim = max(bound) + 3 * sigma
-    delta_s = 2 * space_lim / NR_SSTEPS
+    delta_s = 2 * space_lim / CAA_CFG.nr_ssteps
     # finally, construct the space axis
-    x = pl.linspace(-space_lim, space_lim, NR_SSTEPS)
+    x = pl.linspace(-space_lim, space_lim, CAA_CFG.nr_ssteps)
     # compute the diffusion kernel
     kernel = stats.norm.pdf(x, mu, sigma) * delta_s
     # ... and its Fourier transform. We'll use this to compute FD convolutions
@@ -381,27 +380,27 @@ def predicted_proportions(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, deltaT
     # form an array consisting of the appropriate (upper) integration limits
     clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
     # compute process SD
-    sigma_r = pl.sqrt(2 * d_r * DELTA_T)
-    sigma_f = pl.sqrt(2 * d_f * DELTA_T)
+    sigma_r = pl.sqrt(2 * d_r * CAA_CFG.delta_t)
+    sigma_f = pl.sqrt(2 * d_f * CAA_CFG.delta_t)
     sigma = pl.sqrt(sigma_r**2 + sigma_f**2)
 
     # compute the correlation for r given r+f
     rho = sigma_r / sigma
 
-    t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
+    t = pl.linspace(CAA_CFG.delta_t, CAA_CFG.max_t, CAA_CFG.nr_tsteps)
     # this is the time axis
     to_idx = pl.argmin((t - t_offset) ** 2)
     # compute the index for t_offset
     bound = pl.exp(-tc_bound * pl.clip(t - t_offset, 0, None))
     # this is the collapsing bound
 
-    mu = (mu_r + mu_f) * DELTA_T
+    mu = (mu_r + mu_f) * CAA_CFG.delta_t
     # this is the average overall drift rate, with r = 'recall' and f = 'familiar'
     # compute the bounding limit of the space domain. This should include at least 99% of the probability mass when the particle is at the largest possible bound
     space_lim = max(bound) + 3 * sigma
-    delta_s = 2 * space_lim / NR_SSTEPS
+    delta_s = 2 * space_lim / CAA_CFG.nr_ssteps
     # finally, construct the space axis
-    x = pl.linspace(-space_lim, space_lim, NR_SSTEPS)
+    x = pl.linspace(-space_lim, space_lim, CAA_CFG.nr_ssteps)
     # compute the diffusion kernel
     kernel = stats.norm.pdf(x, mu, sigma) * delta_s
     # ... and its Fourier transform. We'll use this to compute FD convolutions
@@ -564,11 +563,11 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
     # form an array consisting of the appropriate (upper) integration limits
     clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
     # compute process SD
-    sigma_r = pl.sqrt(2 * d_r * DELTA_T)
-    sigma_f = pl.sqrt(2 * d_f * DELTA_T)
+    sigma_r = pl.sqrt(2 * d_r * CAA_CFG.delta_t)
+    sigma_f = pl.sqrt(2 * d_f * CAA_CFG.delta_t)
     sigma = pl.sqrt(sigma_r**2 + sigma_f**2)
 
-    t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
+    t = pl.linspace(CAA_CFG.delta_t, CAA_CFG.max_t, CAA_CFG.nr_tsteps)
     to_idx = pl.argmin((t - t_offset) ** 2)
     # compute the index for t_offset
     bound = pl.exp(-tc_bound * pl.clip(t - t_offset, 0, None))
@@ -579,8 +578,8 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
     #   these position changes should be drawn from a normal distribution with mean
     #   mu and standard deviation sigma
 
-    delta_r = stats.norm.rvs(mu_r * DELTA_T, sigma_r, size=(NR_SAMPLES, NR_TSTEPS))
-    delta_f = stats.norm.rvs(mu_f * DELTA_T, sigma_f, size=(NR_SAMPLES, NR_TSTEPS))
+    delta_r = stats.norm.rvs(mu_r * CAA_CFG.delta_t, sigma_r, size=(CAA_CFG.nr_samples, CAA_CFG.nr_tsteps))
+    delta_f = stats.norm.rvs(mu_f * CAA_CFG.delta_t, sigma_f, size=(CAA_CFG.nr_samples, CAA_CFG.nr_tsteps))
     delta_r[:to_idx] = 0
     delta_f[:to_idx] = 0
     delta_pos = delta_r + delta_f
@@ -589,9 +588,9 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
     positions = pl.cumsum(delta_pos, 1) + z0
     r_positions = pl.cumsum(delta_r, 1)
     # 3. Now loop through each sample trial to compute decisions and resp times
-    decisions = pl.zeros(NR_SAMPLES)
-    resp_times = pl.zeros(NR_SAMPLES)
-    final_pos = pl.zeros((NR_SAMPLES, 2))
+    decisions = pl.zeros(CAA_CFG.nr_samples)
+    resp_times = pl.zeros(CAA_CFG.nr_samples)
+    final_pos = pl.zeros((CAA_CFG.nr_samples, 2))
 
     for i, pos in enumerate(positions):
         # Find the index where the position first crosses a boundary (i.e., 1 or -1)
@@ -600,11 +599,11 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
             cross_idx = cross_indices[0]
             # take the first index
         else:  # i.e., if no crossing was found
-            cross_idx = NR_TSTEPS - 1
+            cross_idx = CAA_CFG.nr_tsteps - 1
             # set it to the final index
         # 4. Now we can use this index to determine both the decision and the response time
         decisions[i] = pos[cross_idx] > 0
-        resp_times[i] = t[cross_idx] - 0.5 * DELTA_T
+        resp_times[i] = t[cross_idx] - 0.5 * CAA_CFG.delta_t
         # i.e., the midpoint of the crossing interval
         final_pos[i] = [pos[cross_idx], r_positions[i, cross_idx]]
 
@@ -615,8 +614,8 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
 
     sigma_r_deltaT = pl.sqrt(2 * d_r * deltaT)
     sigma_f_deltaT = pl.sqrt(2 * d_f * deltaT)
-    r_deltaTs = stats.norm.rvs(mu_r * deltaT, sigma_r_deltaT, size=NR_SAMPLES)
-    pos_deltaTs = stats.norm.rvs(mu_f * deltaT, sigma_f_deltaT, size=NR_SAMPLES) + r_deltaTs
+    r_deltaTs = stats.norm.rvs(mu_r * deltaT, sigma_r_deltaT, size=CAA_CFG.nr_samples)
+    pos_deltaTs = stats.norm.rvs(mu_f * deltaT, sigma_f_deltaT, size=CAA_CFG.nr_samples) + r_deltaTs
     final_pos[:, 0] += pos_deltaTs
     final_pos[:, 1] += r_deltaTs
 
@@ -635,8 +634,8 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
         know_RTs = resp_times[conf_knows]
         params_rem = stats.gamma.fit(rem_RTs, floc=0)
         params_know = stats.gamma.fit(know_RTs, floc=0)
-        p_remember_conf = stats.gamma.pdf(t, *params_rem) * DELTA_T * len(rem_RTs) / float(NR_SAMPLES)
-        p_know_conf = stats.gamma.pdf(t, *params_know) * DELTA_T * len(know_RTs) / float(NR_SAMPLES)
+        p_remember_conf = stats.gamma.pdf(t, *params_rem) * CAA_CFG.delta_t * len(rem_RTs) / float(CAA_CFG.nr_samples)
+        p_know_conf = stats.gamma.pdf(t, *params_know) * CAA_CFG.delta_t * len(know_RTs) / float(CAA_CFG.nr_samples)
 
         p_remember.append(p_remember_conf)
         p_know.append(p_know_conf)
@@ -646,32 +645,32 @@ def predicted_proportions_sim(c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, de
 
     new_RTs = resp_times[pl.logical_not(decisions)]
     params_new = stats.gamma.fit(new_RTs, floc=0)
-    p_new = stats.gamma.pdf(t, *params_new) * DELTA_T * len(new_RTs) / float(NR_SAMPLES)
+    p_new = stats.gamma.pdf(t, *params_new) * CAA_CFG.delta_t * len(new_RTs) / float(CAA_CFG.nr_samples)
     return p_remember, p_know, p_new, t
 
 
 def predicted_proportions_NC(mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, deltaT, use_fftw=True):
     # compute process SD
-    sigma_r = pl.sqrt(2 * d_r * DELTA_T)
-    sigma_f = pl.sqrt(2 * d_f * DELTA_T)
+    sigma_r = pl.sqrt(2 * d_r * CAA_CFG.delta_t)
+    sigma_f = pl.sqrt(2 * d_f * CAA_CFG.delta_t)
     sigma = pl.sqrt(sigma_r**2 + sigma_f**2)
 
     # compute the correlation for r given r+f
     rho = sigma_r / sigma
     rhoF = sigma_f / sigma
 
-    t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
+    t = pl.linspace(CAA_CFG.delta_t, CAA_CFG.max_t, CAA_CFG.nr_tsteps)
     # this is the time axis
     bound = pl.exp(-tc_bound * t)
     # this is the collapsing bound
 
-    mu = (mu_r + mu_f) * DELTA_T
+    mu = (mu_r + mu_f) * CAA_CFG.delta_t
     # this is the average overall drift rate, with r = 'recall' and f = 'familiar'
     # compute the bounding limit of the space domain. This should include at least 99% of the probability mass when the particle is at the largest possible bound
     space_lim = max(bound) + 3 * sigma
-    delta_s = 2 * space_lim / NR_SSTEPS
+    delta_s = 2 * space_lim / CAA_CFG.nr_ssteps
     # finally, construct the space axis
-    x = pl.linspace(-space_lim, space_lim, NR_SSTEPS)
+    x = pl.linspace(-space_lim, space_lim, CAA_CFG.nr_ssteps)
     # compute the diffusion kernel
     kernel = stats.norm.pdf(x, mu, sigma) * delta_s
     # ... and its Fourier transform. We'll use this to compute FD convolutions
@@ -816,7 +815,7 @@ def plot_evp_pair(p_dist, e_dist, e_total, col="g"):
     e_total represents the size of the sample.
     """
     # plot the histogram for observed data
-    t = pl.linspace(DELTA_T, MAX_T, NR_TSTEPS)
+    t = pl.linspace(CAA_CFG.delta_t, CAA_CFG.max_t, CAA_CFG.nr_tsteps)
     # this is the time axis
     # compute the prior distribution for the response category
     p_cat = len(e_dist) * 1.0 / e_total
@@ -826,7 +825,7 @@ def plot_evp_pair(p_dist, e_dist, e_total, col="g"):
     pl.plot(edges, hist_density * p_cat, color=col, lw=2, ls="--", drawstyle="steps")
     # note: the division by DELTA_T below is to make sure that you are plotting
     # probability densities (rather than probability masses)
-    curve = pl.plot(t, p_dist / DELTA_T, col, lw=2)
+    curve = pl.plot(t, p_dist / CAA_CFG.delta_t, col, lw=2)
     pl.axis([0, t.max(), None, None])
     pl.show()
     return curve
