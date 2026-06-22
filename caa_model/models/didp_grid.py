@@ -34,7 +34,7 @@ NR_THREADS = 10  # this is for multithreaded fft
 DELTA_T = 0.025  # size of discrete time increment (sec.)
 MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
 NR_TSTEPS = int(MAX_T / DELTA_T)
-NR_SSTEPS = 892
+NR_SSTEPS = 8192
 NR_SAMPLES = 10000  # number of trials to use for MC likelihood computation
 
 NR_QUANTILES = 10

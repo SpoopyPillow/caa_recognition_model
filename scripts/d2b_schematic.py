@@ -11,8 +11,8 @@ from scipy import stats
 from scipy import optimize
 
 # local imports
-from . import fftw_test as fftw
-from .multinomial_funcs import multinom_loglike, chi_square_gof
+from caa_model.utils import fftw_test as fftw
+from caa_model.utils.multinomial_funcs import multinom_loglike, chi_square_gof
 
 # set a few global matplotlib plotting parameters
 pl.rcParams["legend.frameon"] = "False"
