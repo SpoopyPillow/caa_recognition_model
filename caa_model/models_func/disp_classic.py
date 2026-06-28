@@ -29,7 +29,7 @@ DATA = db["empirical_results"]
 db.close()
 
 
-# NR_THREADS = 1  # this is for multithreaded fft
+NR_THREADS = 1  # this is for multithreaded fft
 # DELTA_T = 0.025  # size of discrete time increment (sec.)
 # MAX_T = 8.0  # ceil(percentile(all_RT,99.5))
 # NR_TSTEPS = int(MAX_T / DELTA_T)
@@ -38,7 +38,7 @@ db.close()
 
 # NR_QUANTILES = 10
 
-fftw.fftw_setup(pl.zeros(CAA_CFG.nr_ssteps), CAA_CFG.nr_threads)
+fftw.fftw_setup(pl.zeros(CAA_CFG.nr_ssteps), NR_THREADS)
 
 # 12/24/2016: modified (for flexibility) to use named tuple instead of list
 # DPMParams defines the overall parametrs for the set of old and new words

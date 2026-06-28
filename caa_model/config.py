@@ -6,8 +6,6 @@ INF_PROXY = 10  # A value used to provide very large but finite bounds for mvn i
 
 @dataclass(frozen=True)
 class CAAConfig:
-    use_fftw: bool = True # Whether to use FFTW
-    nr_threads: int = 10  # Threads for multithreaded FFT
     delta_t: float = 0.025  # Size of discrete time increment (sec)
     nr_ssteps: int = 8192  # Number of steps along the spatial axis
     nr_samples: int = 10000  # Number of trials to use for MC likelihood computation
