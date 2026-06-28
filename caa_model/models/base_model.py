@@ -2,21 +2,26 @@
 from __future__ import absolute_import, division, print_function
 
 # standard library imports
+import shelve
 from collections import namedtuple
 
 # scientific library imports
 import pylab as pl
-import numpy
-from scipy import stats
 from scipy import optimize
 import pyfftw
 
 # local imports
-from ..config import CAA_CFG, EPS, INF_PROXY
+from ..config import CAA_CFG, EPS
 from ..utils import fftw_test as fftw
-from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof, get_rect_prob
+from ..utils.multinomial_funcs import multinom_loglike, chi_square_gof
 
 pyfftw.interfaces.cache.enable()
+
+data_path = "data/"
+# Read in new Vincentized RT data
+db = shelve.open(data_path + "neha_data.dat", "r")
+DATA = db["empirical_results"]
+db.close()
 
 
 class BaseDDM:
@@ -25,10 +30,9 @@ class BaseDDM:
         self.config = config
         self.use_fftw = use_fftw
         self.nr_threads = nr_threads
-        self.best_params = None
 
     @property
-    def _fftw(self):
+    def _fft(self):
         if self.use_fftw:
             return lambda x: pyfftw.interfaces.numpy_fft.fft(x, threads=self.nr_threads)
         return pl.fft
@@ -51,7 +55,7 @@ class BaseDDM:
             return lambda x: pyfftw.interfaces.numpy_fft.ifft2(x, threads=self.nr_threads).real
         return lambda x: pl.ifft2(x).real
 
-    def fit_global(self, param_bounds, data, nr_workers=1, use_chisq=True):
+    def fit_global(self, param_bounds, data=DATA, nr_workers=1, use_chisq=True):
         """
         Does a global maximum-likelihood parameter search, constrained by the bounds
         listed in param_bounds, and returns the result. Each RT distribution (i.e.,
@@ -68,7 +72,7 @@ class BaseDDM:
             disp=True,
         )
 
-    def fit_local(self, param_est, data, use_chisq=True):
+    def fit_local(self, param_est, data=DATA, use_chisq=True):
         """
         Computes MLE of params using a local (fast) and unconstrained optimization
         algorithm. Each RT distribution (i.e., for each judgment category and
@@ -77,20 +81,20 @@ class BaseDDM:
         """
         return optimize.fmin(self.compute_gof_all, param_est, args=(data, use_chisq), disp=True)
 
-    def compute_gof_all(self, model_params, data, use_chisq=True):
+    @staticmethod
+    def split_params(model_params):
+        """Forces the specific model to define how its unique parameters are split."""
+        raise NotImplementedError
+
+    def compute_gof_all(self, model_params, data=DATA, use_chisq=True):
         """
         Computes the overall goodness-of-fit of the model defined by model_params.
         This is the sum of the NLL or chi-square statistics for the distribution
         of responses to both the old and new words.
         """
-        c_val, mu_t, mu_l, d, tc, r_off, z0_t, z0_l, dT, s_z0, t0 = model_params
-        # Confidence bins (High, Med, Low)
-        c_list = [c_val, 0]
+        target_params, lure_params = self.split_params(model_params)
 
-        target_params = (c_list, mu_t, d, tc, r_off, z0_t, dT, s_z0, t0)
         old_data = [data.rem_hit.rt, data.know_hit.rt, data.miss.rt, data.rem_hit.conf, data.know_hit.conf]
-
-        lure_params = (c_list, mu_l, d, tc, r_off, z0_l, dT, s_z0, t0)
         new_data = [data.rem_fa.rt, data.know_fa.rt, data.CR.rt, data.rem_fa.conf, data.know_fa.conf]
 
         gof_target = self.compute_model_gof(target_params, *old_data, use_chisq=use_chisq)
