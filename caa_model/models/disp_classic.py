@@ -16,7 +16,7 @@ from ..utils.multinomial_funcs import get_rect_prob
 
 class DISPClassicDDM(BaseDDM):
     Params = namedtuple(
-        "DISPClassicParams",
+        "Params",
         [
             "c",
             "mu_r",
@@ -45,33 +45,38 @@ class DISPClassicDDM(BaseDDM):
 
     def predicted_proportions(self, params):
         c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, deltaT, t_offset = params
+        delta_t = self.config.delta_t
+        max_t = self.config.max_t
+        nr_tsteps = self.config.nr_tsteps
+        nr_ssteps = self.config.nr_ssteps
+
         # make c (the confidence levels) an array in case it is a scalar value
         c = pl.array(c, ndmin=1)
         n = len(c)
         # form an array consisting of the appropriate (upper) integration limits
         clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
         # compute process SD
-        sigma_r = pl.sqrt(2 * d_r * self.config.delta_t)
-        sigma_f = pl.sqrt(2 * d_f * self.config.delta_t)
+        sigma_r = pl.sqrt(2 * d_r * delta_t)
+        sigma_f = pl.sqrt(2 * d_f * delta_t)
         sigma = pl.sqrt(sigma_r**2 + sigma_f**2)
 
         # compute the correlation for r given r+f
         rho = sigma_r / sigma
 
-        t = pl.linspace(self.config.delta_t, self.config.max_t, self.config.nr_tsteps)
+        t = pl.linspace(delta_t, max_t, nr_tsteps)
         # this is the time axis
         to_idx = pl.argmin((t - t_offset) ** 2)
         # compute the index for t_offset
         bound = pl.exp(-tc_bound * pl.clip(t - t_offset, 0, None))
         # this is the collapsing bound
 
-        mu = (mu_r + mu_f) * self.config.delta_t
+        mu = (mu_r + mu_f) * delta_t
         # this is the average overall drift rate, with r = 'recall' and f = 'familiar'
         # compute the bounding limit of the space domain. This should include at least 99% of the probability mass when the particle is at the largest possible bound
         space_lim = max(bound) + 3 * sigma
-        delta_s = 2 * space_lim / self.config.nr_ssteps
+        delta_s = 2 * space_lim / nr_ssteps
         # finally, construct the space axis
-        x = pl.linspace(-space_lim, space_lim, self.config.nr_ssteps)
+        x = pl.linspace(-space_lim, space_lim, nr_ssteps)
         # compute the diffusion kernel
         kernel = stats.norm.pdf(x, mu, sigma) * delta_s
         # ... and its Fourier transform. We'll use this to compute FD convolutions
