@@ -26,7 +26,7 @@ class SISPConstrainedDDM(BaseDDM):
             "r_bound_offset",  # Remember boundary offset
             "z0_t",  # Target starting point
             "z0_l",  # Lure starting point
-            "deltaT",  # Post-decision accumulation time
+            "t_post",  # Post-decision accumulation time
             "sigma_z0",  # Starting position variability
             "t0",  # Non-decision time
         ],
@@ -58,11 +58,11 @@ class SISPConstrainedDDM(BaseDDM):
             tc_bound       : boundary collapse rate (tau)
             r_bound_offset : fixed distance from z0 to remember criterion
             z0             : starting location (recency > 0, novelty < 0)
-            deltaT         : post-response accumulation interval
+            t_post         : post-response accumulation interval
             t0             : accumulation start time
             sigma_z0       : variability in percieved familiarity across trials
         """
-        c, mu_r, d, tc_bound, r_bound_offset, z0, deltaT, sigma_z0, t0 = params
+        c, mu_r, d, tc_bound, r_bound_offset, z0, t_post, sigma_z0, t0 = params
         delta_t = self.config.delta_t
         max_t = self.config.max_t
         nr_tsteps = self.config.nr_tsteps
@@ -132,8 +132,8 @@ class SISPConstrainedDDM(BaseDDM):
             tx[i] *= abs(x) < bound[i]
 
             # Mean and SD of accumulator after deltaT
-            mu_delta = crossing_val + mu_r * deltaT
-            std_delta = pl.sqrt(2 * d * deltaT)
+            mu_delta = crossing_val + mu_r * t_post
+            std_delta = pl.sqrt(2 * d * t_post)
 
             # Distribution of accumulator after deltaT
             dist = stats.norm(loc=mu_delta, scale=std_delta)
@@ -166,7 +166,7 @@ param_bounds = SISPConstrainedDDM.Params(
     r_bound_offset=(0.0, 1.0),
     z0_t=(-2.0, 2.0),
     z0_l=(-2.0, 2.0),
-    deltaT=(EPS, 2.0),
+    t_post=(EPS, 2.0),
     sigma_z0=(EPS, 1.0),
     t0=(0.0, 0.5),
 )

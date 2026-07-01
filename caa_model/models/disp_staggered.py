@@ -14,7 +14,7 @@ from ..config import EPS, INF_PROXY
 from ..utils.multinomial_funcs import get_rect_prob
 
 
-class DISPClassicDDM(BaseDDM):
+class DISPStaggeredDDM(BaseDDM):
     Params = namedtuple(
         "Params",
         [
@@ -29,17 +29,18 @@ class DISPClassicDDM(BaseDDM):
             "mu_r_new",
             "mu_f_new",
             "t_post",
+            "t_delay_r",
             "t0",
         ],
     )
 
     @staticmethod
     def split_params(model_params):
-        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, mu_r0, mu_f0, t_post, t0 = model_params
+        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, mu_r0, mu_f0, t_post, t_delay_r, t0 = model_params
         c_list = [c, 0]
 
-        target_params = (c_list, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, t_post, t0)
-        lure_params = (c_list, mu_r0, mu_f0, d_r, d_f, tc_bound, r_bound, z0, t_post, t0)
+        target_params = (c_list, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, t_post, t_delay_r, t0)
+        lure_params = (c_list, mu_r0, mu_f0, d_r, d_f, tc_bound, r_bound, z0, t_post, t_delay_r, t0)
 
         return target_params, lure_params
 
@@ -47,7 +48,7 @@ class DISPClassicDDM(BaseDDM):
         """
         Revised DISP model with staggered recollection time offset.
         """
-        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, t_post, t0 = params
+        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, t_post, t_delay_r, t0 = params
         delta_t = self.config.delta_t
         max_t = self.config.max_t
         nr_tsteps = self.config.nr_tsteps
@@ -59,14 +60,10 @@ class DISPClassicDDM(BaseDDM):
         clims = pl.hstack(([INF_PROXY], c, [-INF_PROXY]))
 
         # --- Pre-compute per-step constants and grid ---
-        # Compute SD and mean drift of the accumulator per-step
+        # Compute SD of the accumulator per-step
         sigma_r = pl.sqrt(2 * d_r * delta_t)
         sigma_f = pl.sqrt(2 * d_f * delta_t)
-        sigma = pl.sqrt(sigma_r**2 + sigma_f**2)
-        mu = (mu_r + mu_f) * delta_t
-
-        # Compute the correlation for r given r+f
-        rho = sigma_r / sigma
+        sigma_comb = pl.sqrt(sigma_r**2 + sigma_f**2)
 
         # Create the time axis, where to_idx is the index of the first time step
         t = pl.linspace(delta_t, max_t, nr_tsteps)
@@ -75,14 +72,17 @@ class DISPClassicDDM(BaseDDM):
         bound = pl.exp(-tc_bound * pl.clip(t - t0, 0, None))
 
         # Create the grid for the accumulator
-        space_lim = max(bound) + 3 * sigma
+        space_lim = max(bound) + 3 * sigma_comb
         delta_s = 2 * space_lim / nr_ssteps
         x = pl.linspace(-space_lim, space_lim, nr_ssteps)
 
-        # Kernel is the probability mass function for each step
-        kernel = stats.norm.pdf(x, mu, sigma) * delta_s
-        # FFT to prepare for convolution
-        ft_kernel = self._fft(kernel)
+        # Familiarity only kernel
+        kernel_f = stats.norm.pdf(x, mu_f * delta_t, sigma_f) * delta_s
+        ft_kernel_f = self._fft(kernel_f)
+
+        # Combined (recollection + familiarity) kernel
+        kernel_comb = stats.norm.pdf(x, (mu_r + mu_f) * delta_t, sigma_comb) * delta_s
+        ft_kernel_comb = self._fft(kernel_comb)
 
         # --- Initializing output arrays ---
         tx = pl.zeros((len(t), len(x)))  # RT distribution at each time point
@@ -92,16 +92,22 @@ class DISPClassicDDM(BaseDDM):
         p_know_conf = pl.zeros((n + 1, pl.size(t)))  # Yes responses that are known (does not cross r_bound)
 
         for i in range(to_idx, len(t)):
-            t_elapsed = (t[i] - t[to_idx]) + delta_t
+            # Track exactly how long each process has been awake
+            t_f_elapsed = (t[i] - t[to_idx]) + delta_t
+            t_r_elapsed = max(0.0, t_f_elapsed - t_delay_r)
+            is_r_active = t_r_elapsed > 0
 
             # --- Move the particle ---
             # Initialize or advance the probability mass distribution by one step
             if i == to_idx:
                 # Initialize starting normal distribution
-                tx[i] = stats.norm.pdf(x, mu + z0, sigma) * delta_s
+                step_mu = (mu_f if not is_r_active else mu_r + mu_f) * delta_t
+                step_sigma = sigma_f if not is_r_active else sigma_comb
+                tx[i] = stats.norm.pdf(x, step_mu + z0, step_sigma) * delta_s
             else:
                 # Convolve previous state with kernel
-                tx[i] = abs(pl.ifftshift(self._ifft(self._fft(tx[i - 1]) * ft_kernel)))
+                active_ft_kernel = ft_kernel_f if not is_r_active else ft_kernel_comb
+                tx[i] = abs(pl.ifftshift(self._ifft(self._fft(tx[i - 1]) * active_ft_kernel)))
 
             # --- Identify particles that cross the bound ---
             p_pos = tx[i][x >= bound[i]]
@@ -121,21 +127,31 @@ class DISPClassicDDM(BaseDDM):
 
             # --- Statistics of particles that cross the bound ---
             # Compute STD(r) for the current time
-            s_r = pl.sqrt(2 * d_r * t_elapsed)
-            s_f = pl.sqrt(2 * d_f * t_elapsed)
+            s_r = pl.sqrt(2 * d_r * t_r_elapsed)
+            s_f = pl.sqrt(2 * d_f * t_f_elapsed)
+            s_comb = pl.sqrt(s_r**2 + s_f**2)
+
+            # Compute the correlation for r given r+f
+            rho = s_r / s_comb
 
             # Compute STD[r|(r+f) = bound]
             s_r_cond = s_r * pl.sqrt(1 - rho**2)
-            s_f_cond = s_f * pl.sqrt(1 - (sigma_f / sigma) ** 2)
+            s_f_cond = s_f * pl.sqrt(1 - (s_f / s_comb) ** 2)
 
             # Compute E[r|(r+f) > bound]
-            mu_r_cond = mu_r * t_elapsed + (comb_est - t_elapsed * (mu_r + mu_f) - z0) * rho**2
+            expected_r = mu_r * t_r_elapsed
+            expected_comb = expected_r + (mu_f * t_f_elapsed) + z0
+            mu_r_cond = expected_r + (comb_est - expected_comb) * rho**2
 
             # --- Post-decision bivariate distribution (t_post seconds after decision) ---
-            mu_r_delta = mu_r_cond + mu_r * t_post
-            mu_comb_delta = (mu_r + mu_f) * t_post + comb_est
+            t_f_post_elapsed = t_f_elapsed + t_post
+            t_r_post_elapsed = max(0.0, t_f_post_elapsed - t_delay_r)
+            t_r_gained_in_post = t_r_post_elapsed - t_r_elapsed
 
-            s2_r_delta = s_r_cond**2 + 2 * d_r * t_post
+            mu_r_delta = mu_r_cond + mu_r * t_r_gained_in_post
+            mu_comb_delta = comb_est + mu_r * t_r_gained_in_post + mu_f * t_post
+
+            s2_r_delta = s_r_cond**2 + 2 * d_r * t_r_gained_in_post
             s2_f_delta = s_f_cond**2 + 2 * d_f * t_post
 
             s2_comb_delta = s2_r_delta + s2_f_delta
@@ -159,22 +175,18 @@ class DISPClassicDDM(BaseDDM):
         return p_rem_conf, p_know_conf, p_new, t
 
 
-
-params_est = DISPClassicDDM.Params(
-    0.9984, 0.002, 0.3035, 0.0037, 0.3736, 0.0585, 0.001, -0.1306, -0.0142, -0.2438, 0.5859, 0.5126
-)
-
-param_bounds = DISPClassicDDM.Params(
-    (0.0, 1.0),
-    (-2.0, 2.0),
-    (-2.0, 2.0),
-    (EPS, 1.0),
-    (EPS, 1.0),
-    (0.05, 1.0),
-    (0.0, 1.0),
-    (-1.0, 1.0),
-    (-2.0, 2.0),
-    (-2.0, 2.0),
-    (EPS, 2.0),
-    (0, 0.5),
+param_bounds = DISPStaggeredDDM.Params(
+    c=(0.0, 1.0),
+    mu_r=(-2.0, 2.0),
+    mu_f=(-2.0, 2.0),
+    d_r=(EPS, 1.0),
+    d_f=(EPS, 1.0),
+    tc_bound=(0.05, 1.0),
+    r_bound=(0.0, 1.0),
+    z0=(-1.0, 1.0),
+    mu_r_new=(-2.0, 2.0),
+    mu_f_new=(-2.0, 2.0),
+    t_post=(EPS, 2.0),
+    t_delay_r=(EPS, 0.5),
+    t0=(0, 0.5),
 )
