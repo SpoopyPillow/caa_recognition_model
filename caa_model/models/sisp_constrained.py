@@ -119,17 +119,17 @@ class SISPConstrainedDDM(BaseDDM):
             p_old[i] = pl.sum(p_pos)
             p_new[i] = pl.sum(tx[i][x <= -bound[i]])
 
-            # Different calculation on first step
-            if i == to_idx:
-                # Crossing is exactly on the boundary
-                crossing_val = bound[to_idx]
-            else:
-                # Calculate expected crossing position
-                x_pos = x[x >= bound[i]]
-                crossing_val = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
-
             # Zero out particles that already crossed the boundary
             tx[i] *= abs(x) < bound[i]
+
+            p_sum = pl.sum(p_pos)
+            if p_sum <= EPS:
+                # No particles crossed the bound
+                continue
+
+            # Find the expected location of the mass that crossed
+            x_pos = x[x >= bound[i]]
+            crossing_val = pl.dot(p_pos, x_pos) / p_sum
 
             # Mean and SD of accumulator after deltaT
             mu_delta = crossing_val + mu_r * t_post

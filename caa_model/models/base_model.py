@@ -124,24 +124,26 @@ class BaseDDM:
         # Number of confidence levels being used in the model
         nr_conf_levels = len(rem_qs)
 
-        # Adjust the number of confidence levels in the data to match
-        rem_conf = pl.clip(rem_conf, 0, nr_conf_levels - 1)
-        know_conf = pl.clip(know_conf, 0, nr_conf_levels - 1)
+        # Pre-allocate frequency containers
+        rem_freqs = pl.zeros((nr_conf_levels, nr_quantiles))
+        know_freqs = pl.zeros((nr_conf_levels, nr_quantiles))
 
-        # Computer number of RTs falling into each quantile bin
-        rem_freqs = pl.array(
-            [
-                -pl.diff([pl.sum(rem_RTs[rem_conf == i] > q) for q in rem_qs[i]] + [0])
-                for i in range(nr_conf_levels)
-            ]
-        )
-        know_freqs = pl.array(
-            [
-                -pl.diff([pl.sum(know_RTs[know_conf == i] > q) for q in know_qs[i]] + [0])
-                for i in range(nr_conf_levels)
-            ]
-        )
-        new_freqs = -pl.diff([pl.sum(new_RTs > q) for q in new_qs] + [0])
+        for i in range(nr_conf_levels):
+            # Isolate empirical RT vectors for the current confidence level
+            r_rts = rem_RTs[rem_conf == i]
+            k_rts = know_RTs[know_conf == i]
+
+            # Append infinity to the boundaries to ensure the final quantile catches the long RT tail
+            r_bins = pl.append(rem_qs[i], pl.inf)
+            k_bins = pl.append(know_qs[i], pl.inf)
+
+            # Computer number of RTs falling into each quantile bin
+            rem_freqs[i], _ = pl.histogram(r_rts, bins=r_bins)
+            know_freqs[i], _ = pl.histogram(k_rts, bins=k_bins)
+
+        # Vectorized frequency count for New responses (Correct Rejections / False Alarms)
+        new_bins = pl.append(new_qs, pl.inf)
+        new_freqs, _ = pl.histogram(new_RTs, bins=new_bins)
 
         # Flip these frequencies so they are in order of descending confidence levels
         rem_freqs = pl.flipud(rem_freqs)
@@ -181,9 +183,15 @@ class BaseDDM:
         P_new = pl.cumsum(p_new) / p_new_total
 
         # Find time point for each quantile
-        rem_quantiles = pl.array([t[pl.argmax(P_rem > q, -1)] for q in quantiles]).T
-        know_quantiles = pl.array([t[pl.argmax(P_know > q, -1)] for q in quantiles]).T
-        new_quantiles = pl.array([t[pl.argmax(P_new > q)] for q in quantiles])
+        # Cumsum is already sorted, so we can use searchsorted
+        max_idx = len(t) - 1
+        rem_quantiles = pl.array(
+            [t[pl.clip(pl.searchsorted(P_rem[i], quantiles), 0, max_idx)] for i in range(len(P_rem))]
+        )
+        know_quantiles = pl.array(
+            [t[pl.clip(pl.searchsorted(P_know[i], quantiles), 0, max_idx)] for i in range(len(P_know))]
+        )
+        new_quantiles = t[pl.clip(pl.searchsorted(P_new, quantiles), 0, max_idx)]
 
         # Initialize first quantile at t=0
         rem_quantiles[:, 0] = 0

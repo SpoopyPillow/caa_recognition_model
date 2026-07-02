@@ -108,16 +108,17 @@ class DISPClassicDDM(BaseDDM):
             p_old[i] = pl.sum(p_pos)
             p_new[i] = pl.sum(tx[i][x <= -bound[i]])
 
-            # Find the expected location of the mass that crossed
-            if i == to_idx:
-                # At first step, expected location is at bound
-                comb_est = bound[i]
-            else:
-                x_pos = x[x >= bound[i]]
-                comb_est = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
-
             # Remove from consideration any particles that already hit the bound
             tx[i] *= abs(x) < bound[i]
+
+            p_sum = pl.sum(p_pos)
+            if p_sum <= EPS:
+                # No particles crossed the bound
+                continue
+
+            # Find the expected location of the mass that crossed
+            x_pos = x[x >= bound[i]]
+            comb_est = pl.dot(p_pos, x_pos) / p_sum
 
             # --- Statistics of particles that cross the bound ---
             # Compute STD(r) for the current time
@@ -157,7 +158,6 @@ class DISPClassicDDM(BaseDDM):
                 p_rem_conf[j - 1, i] = p_old[i] * get_rect_prob(mvn_dist, RLL, RUL)
 
         return p_rem_conf, p_know_conf, p_new, t
-
 
 
 params_est = DISPClassicDDM.Params(

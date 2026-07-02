@@ -26,6 +26,7 @@ class DISPStaggeredDDM(BaseDDM):
             "tc_bound",
             "r_bound",
             "z0",
+            "z0_new",
             "mu_r_new",
             "mu_f_new",
             "t_post",
@@ -36,11 +37,11 @@ class DISPStaggeredDDM(BaseDDM):
 
     @staticmethod
     def split_params(model_params):
-        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, mu_r0, mu_f0, t_post, t_delay_r, t0 = model_params
+        c, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, z0_new, mu_r0, mu_f0, t_post, t_delay_r, t0 = model_params
         c_list = [c, 0]
 
         target_params = (c_list, mu_r, mu_f, d_r, d_f, tc_bound, r_bound, z0, t_post, t_delay_r, t0)
-        lure_params = (c_list, mu_r0, mu_f0, d_r, d_f, tc_bound, r_bound, z0, t_post, t_delay_r, t0)
+        lure_params = (c_list, mu_r0, mu_f0, d_r, d_f, tc_bound, r_bound, z0_new, t_post, t_delay_r, t0)
 
         return target_params, lure_params
 
@@ -114,16 +115,17 @@ class DISPStaggeredDDM(BaseDDM):
             p_old[i] = pl.sum(p_pos)
             p_new[i] = pl.sum(tx[i][x <= -bound[i]])
 
-            # Find the expected location of the mass that crossed
-            if i == to_idx:
-                # At first step, expected location is at bound
-                comb_est = bound[i]
-            else:
-                x_pos = x[x >= bound[i]]
-                comb_est = (pl.dot(p_pos, x_pos) + EPS) / (pl.sum(p_pos) + EPS)
-
             # Remove from consideration any particles that already hit the bound
             tx[i] *= abs(x) < bound[i]
+
+            p_sum = pl.sum(p_pos)
+            if p_sum <= EPS:
+                # No particles crossed the bound
+                continue
+
+            # Find the expected location of the mass that crossed
+            x_pos = x[x >= bound[i]]
+            comb_est = pl.dot(p_pos, x_pos) / p_sum
 
             # --- Statistics of particles that cross the bound ---
             # Compute STD(r) for the current time
@@ -157,6 +159,10 @@ class DISPStaggeredDDM(BaseDDM):
             s2_comb_delta = s2_r_delta + s2_f_delta
             cov_delta = s2_r_delta
 
+            # Inject microscopic variance to prevent SciPy divide-by-zero crashes
+            s2_r_delta += EPS
+            s2_comb_delta += EPS
+
             # Build 2D distribution [Recollection, Total Evidence (Recollection + Familiarity)]
             mu_mvn = pl.array([mu_r_delta, mu_comb_delta])
             sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
@@ -183,10 +189,11 @@ param_bounds = DISPStaggeredDDM.Params(
     d_f=(EPS, 1.0),
     tc_bound=(0.05, 1.0),
     r_bound=(0.0, 1.0),
-    z0=(-1.0, 1.0),
+    z0=(-0.95, 0.95),
+    z0_new=(-0.95, 0.95),
     mu_r_new=(-2.0, 2.0),
     mu_f_new=(-2.0, 2.0),
     t_post=(EPS, 2.0),
-    t_delay_r=(EPS, 0.5),
+    t_delay_r=(0, 0.5),
     t0=(0, 0.5),
 )
