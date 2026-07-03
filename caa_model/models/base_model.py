@@ -152,9 +152,9 @@ class BaseDDM:
         x = pl.hstack([rem_freqs.flatten(), know_freqs.flatten(), new_freqs])
 
         # Compute probabilities for each category (1/nr_quantiles of mass is in each bin)
-        p_rem_pred = p_r[:, None] * pl.ones((nr_conf_levels, nr_quantiles)) / float(nr_quantiles)
-        p_know_pred = p_k[:, None] * pl.ones((nr_conf_levels, nr_quantiles)) / float(nr_quantiles)
-        p_new_pred = p_n * pl.ones(nr_quantiles) / float(nr_quantiles)
+        p_rem_pred = pl.repeat(p_r[:, None] / nr_quantiles, nr_quantiles, axis=1)
+        p_know_pred = pl.repeat(p_k[:, None] / nr_quantiles, nr_quantiles, axis=1)
+        p_new_pred = pl.repeat(p_n / nr_quantiles, nr_quantiles)
 
         p_pred = pl.hstack([p_rem_pred.flatten(), p_know_pred.flatten(), p_new_pred])
 

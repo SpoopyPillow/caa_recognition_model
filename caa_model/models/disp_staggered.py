@@ -146,26 +146,37 @@ class DISPStaggeredDDM(BaseDDM):
             mu_r_cond = expected_r + (comb_est - expected_comb) * rho**2
 
             # --- Post-decision bivariate distribution (t_post seconds after decision) ---
+            # Build 2D MVN distribution [Recollection, Total Evidence (Recollection + Familiarity)]
+
+            # Time elapsed for each process since decision
             t_f_post_elapsed = t_f_elapsed + t_post
             t_r_post_elapsed = max(0.0, t_f_post_elapsed - t_delay_r)
             t_r_gained_in_post = t_r_post_elapsed - t_r_elapsed
 
+            # Expected value of post-decision MVN
             mu_r_delta = mu_r_cond + mu_r * t_r_gained_in_post
             mu_comb_delta = comb_est + mu_r * t_r_gained_in_post + mu_f * t_post
+            mu_mvn = pl.array([mu_r_delta, mu_comb_delta])
 
-            s2_r_delta = s_r_cond**2 + 2 * d_r * t_r_gained_in_post
-            s2_f_delta = s_f_cond**2 + 2 * d_f * t_post
+            # Covariance matrix of post-decision MVN
+            # Isolated post-decision variance
+            s2_r_post = 2 * d_r * t_r_gained_in_post
+            s2_f_post = 2 * d_f * t_post
 
-            s2_comb_delta = s2_r_delta + s2_f_delta
-            cov_delta = s2_r_delta
+            # Recollection variance includes conditional boundary variance + post-decision variance
+            s2_r_delta = s_r_cond**2 + s2_r_post
+            # Total evidence variance includes only post-decision variance
+            s2_comb_delta = s2_r_post + s2_f_post
+            # Covariance (between post-decision r and r+f) ONLY depends on post-decision recollection variance
+            cov_delta = s2_r_post
 
             # Inject microscopic variance to prevent SciPy divide-by-zero crashes
             s2_r_delta += EPS
             s2_comb_delta += EPS
 
-            # Build 2D distribution [Recollection, Total Evidence (Recollection + Familiarity)]
-            mu_mvn = pl.array([mu_r_delta, mu_comb_delta])
             sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
+
+            # Build MVN
             mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
 
             # --- Compute conditional probability of each confidence level ---
