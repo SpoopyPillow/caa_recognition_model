@@ -55,7 +55,7 @@ class BaseDDM:
             return lambda x: pyfftw.interfaces.numpy_fft.ifft2(x, threads=self.nr_threads).real
         return lambda x: pl.ifft2(x).real
 
-    def fit_global(self, param_bounds, data=DATA, nr_workers=1, use_chisq=True):
+    def fit_global(self, param_bounds, data=DATA, nr_workers=1, use_chisq=False):
         """
         Does a global maximum-likelihood parameter search, constrained by the bounds
         listed in param_bounds, and returns the result. Each RT distribution (i.e.,
@@ -72,7 +72,7 @@ class BaseDDM:
             disp=True,
         )
 
-    def fit_local(self, param_est, data=DATA, use_chisq=True):
+    def fit_local(self, param_est, data=DATA, use_chisq=False):
         """
         Computes MLE of params using a local (fast) and unconstrained optimization
         algorithm. Each RT distribution (i.e., for each judgment category and
@@ -86,7 +86,7 @@ class BaseDDM:
         """Forces the specific model to define how its unique parameters are split."""
         raise NotImplementedError
 
-    def compute_gof_all(self, model_params, data=DATA, use_chisq=True):
+    def compute_gof_all(self, model_params, data=DATA, use_chisq=False):
         """
         Computes the overall goodness-of-fit of the model defined by model_params.
         This is the sum of the NLL or chi-square statistics for the distribution
@@ -110,7 +110,7 @@ class BaseDDM:
         new_RTs,
         rem_conf,
         know_conf,
-        use_chisq=True,
+        use_chisq=False,
     ):
         """Compute the NLL or chi-square fit of the model to the data."""
         nr_quantiles = self.config.nr_quantiles
