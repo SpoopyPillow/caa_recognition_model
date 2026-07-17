@@ -2,7 +2,7 @@
 from __future__ import absolute_import, division, print_function
 
 # standard library imports
-from collections import namedtuple
+from typing import NamedTuple
 
 # scientific library imports
 import pylab as pl
@@ -15,22 +15,18 @@ from ..utils.multinomial_funcs import get_rect_prob
 
 
 class SISPConstrainedDDM(BaseDDM):
-    Params = namedtuple(
-        "Params",
-        [
-            "c",  # High confidence boundary
-            "mu_t",  # Target drift
-            "mu_l",  # Lure drift
-            "d",  # Diffusion constant
-            "tc_bound",  # Boundary collapse rate
-            "r_bound_offset",  # Remember boundary offset
-            "z0_t",  # Target starting point
-            "z0_l",  # Lure starting point
-            "t_post",  # Post-decision accumulation time
-            "sigma_z0",  # Starting position variability
-            "t0",  # Non-decision time
-        ],
-    )
+    class Params(NamedTuple):
+        c: float  # High confidence boundary
+        mu_t: float  # Target drift
+        mu_l: float  # Lure drift
+        d: float  # Diffusion constant
+        tc_bound: float  # Boundary collapse rate
+        r_bound_offset: float  # Remember boundary offset
+        z0_t: float  # Target starting point
+        z0_l: float  # Lure starting point
+        t_post: float  # Post-decision accumulation time
+        sigma_z0: float  # Starting position variability
+        t0: float  # Non-decision time
 
     @staticmethod
     def split_params(model_params):
@@ -157,20 +153,6 @@ class SISPConstrainedDDM(BaseDDM):
         return p_rem_conf, p_know_conf, p_new, t
 
 
-param_bounds = SISPConstrainedDDM.Params(
-    c=(0.0, 2.0),
-    mu_t=(0.0, 2.0),
-    mu_l=(0.0, 1.0),
-    d=(EPS, 1.0),
-    tc_bound=(0.0, 1.0),
-    r_bound_offset=(0.0, 1.0),
-    z0_t=(-2.0, 2.0),
-    z0_l=(-2.0, 2.0),
-    t_post=(EPS, 2.0),
-    sigma_z0=(EPS, 1.0),
-    t0=(0.0, 0.5),
-)
-
 # Parameters obtained from using 10 quantiles
 params_est = SISPConstrainedDDM.Params(
     1.7802366345277048,
@@ -184,4 +166,33 @@ params_est = SISPConstrainedDDM.Params(
     1.5546604244949078,
     0.12666843828878627,
     0.46706560655302104,
+)
+
+param_bounds = (
+    SISPConstrainedDDM.Params(
+        c=0.0,
+        mu_t=0.0,
+        mu_l=0.0,
+        d=EPS,
+        tc_bound=0.0,
+        r_bound_offset=0.0,
+        z0_t=-2.0,
+        z0_l=-2.0,
+        t_post=EPS,
+        sigma_z0=EPS,
+        t0=0.0,
+    ),
+    SISPConstrainedDDM.Params(
+        c=2.0,
+        mu_t=2.0,
+        mu_l=1.0,
+        d=1.0,
+        tc_bound=1.0,
+        r_bound_offset=1.0,
+        z0_t=2.0,
+        z0_l=2.0,
+        t_post=2.0,
+        sigma_z0=1.0,
+        t0=0.5,
+    ),
 )

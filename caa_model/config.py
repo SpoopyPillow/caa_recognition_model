@@ -11,7 +11,7 @@ class CAAConfig:
     nr_samples: int = 10000  # Number of trials to use for MC likelihood computation
 
     max_t: float = 8.0  # The ceiling of the time axis
-    nr_quantiles: int = 10  # Number of quantiles for RT distribution
+    nr_quantiles: int = 5  # Number of quantiles for RT distribution
 
     nr_tsteps: int = field(init=False)
 

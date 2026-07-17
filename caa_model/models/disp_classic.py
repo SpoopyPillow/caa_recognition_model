@@ -2,7 +2,7 @@
 from __future__ import absolute_import, division, print_function
 
 # standard library imports
-from collections import namedtuple
+from typing import NamedTuple
 
 # scientific library imports
 import pylab as pl
@@ -15,23 +15,19 @@ from ..utils.multinomial_funcs import get_rect_prob
 
 
 class DISPClassicDDM(BaseDDM):
-    Params = namedtuple(
-        "Params",
-        [
-            "c",
-            "mu_r",
-            "mu_f",
-            "d_r",
-            "d_f",
-            "tc_bound",
-            "r_bound",
-            "z0",
-            "mu_r_new",
-            "mu_f_new",
-            "t_post",
-            "t0",
-        ],
-    )
+    class Params(NamedTuple):
+        c: float
+        mu_r: float
+        mu_f: float
+        d_r: float
+        d_f: float
+        tc_bound: float
+        r_bound: float
+        z0: float
+        mu_r_new: float
+        mu_f_new: float
+        t_post: float
+        t0: float
 
     @staticmethod
     def split_params(model_params):
@@ -159,6 +155,7 @@ class DISPClassicDDM(BaseDDM):
 
             sigma_mvn = pl.array([[s2_r_delta, cov_delta], [cov_delta, s2_comb_delta]])
 
+            # TODO: Batch MVN instead of instantiating new object each time step
             # Build MVN
             mvn_dist = stats.multivariate_normal(mean=mu_mvn, cov=sigma_mvn, allow_singular=True)
 
@@ -179,17 +176,33 @@ params_est = DISPClassicDDM.Params(
     0.9984, 0.002, 0.3035, 0.0037, 0.3736, 0.0585, 0.001, -0.1306, -0.0142, -0.2438, 0.5859, 0.5126
 )
 
-param_bounds = DISPClassicDDM.Params(
-    (0.0, 1.0),
-    (-2.0, 2.0),
-    (-2.0, 2.0),
-    (EPS, 1.0),
-    (EPS, 1.0),
-    (0.05, 1.0),
-    (0.0, 1.0),
-    (-1.0, 1.0),
-    (-2.0, 2.0),
-    (-2.0, 2.0),
-    (EPS, 2.0),
-    (0, 0.5),
-)
+param_bounds = [
+    DISPClassicDDM.Params(
+        c=0.0,
+        mu_r=-2.0,
+        mu_f=-2.0,
+        d_r=EPS,
+        d_f=EPS,
+        tc_bound=0.05,
+        r_bound=0.0,
+        z0=-1.0,
+        mu_r_new=-2.0,
+        mu_f_new=-2.0,
+        t_post=EPS,
+        t0=0.0,
+    ),
+    DISPClassicDDM.Params(
+        c=1.0,
+        mu_r=2.0,
+        mu_f=2.0,
+        d_r=1.0,
+        d_f=1.0,
+        tc_bound=1.0,
+        r_bound=1.0,
+        z0=1.0,
+        mu_r_new=2.0,
+        mu_f_new=2.0,
+        t_post=2.0,
+        t0=0.5,
+    ),
+]

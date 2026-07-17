@@ -2,7 +2,7 @@
 from __future__ import absolute_import, division, print_function
 
 # standard library imports
-from collections import namedtuple
+from typing import NamedTuple
 
 # scientific library imports
 import pylab as pl
@@ -15,25 +15,21 @@ from ..utils.multinomial_funcs import get_rect_prob
 
 
 class DISPStaggeredDDM(BaseDDM):
-    Params = namedtuple(
-        "Params",
-        [
-            "c",
-            "mu_r",
-            "mu_f",
-            "d_r",
-            "d_f",
-            "tc_bound",
-            "r_bound",
-            "z0",
-            "z0_new",
-            "mu_r_new",
-            "mu_f_new",
-            "t_post",
-            "t_delay_r",
-            "t0",
-        ],
-    )
+    class Params(NamedTuple):
+        c: float
+        mu_r: float
+        mu_f: float
+        d_r: float
+        d_f: float
+        tc_bound: float
+        r_bound: float
+        z0: float
+        z0_new: float
+        mu_r_new: float
+        mu_f_new: float
+        t_post: float
+        t_delay_r: float
+        t0: float
 
     @staticmethod
     def split_params(model_params):
@@ -192,19 +188,37 @@ class DISPStaggeredDDM(BaseDDM):
         return p_rem_conf, p_know_conf, p_new, t
 
 
-param_bounds = DISPStaggeredDDM.Params(
-    c=(0.0, 1.0),
-    mu_r=(-2.0, 2.0),
-    mu_f=(-2.0, 2.0),
-    d_r=(EPS, 1.0),
-    d_f=(EPS, 1.0),
-    tc_bound=(0.05, 1.0),
-    r_bound=(0.0, 1.0),
-    z0=(-0.95, 0.95),
-    z0_new=(-0.95, 0.95),
-    mu_r_new=(-2.0, 2.0),
-    mu_f_new=(-2.0, 2.0),
-    t_post=(EPS, 2.0),
-    t_delay_r=(0, 0.5),
-    t0=(0, 0.5),
-)
+param_bounds = [
+    DISPStaggeredDDM.Params(
+        c=0.0,
+        mu_r=-2.0,
+        mu_f=-2.0,
+        d_r=EPS,
+        d_f=EPS,
+        tc_bound=0.05,
+        r_bound=0.0,
+        z0=-0.95,
+        z0_new=-0.95,
+        mu_r_new=-2.0,
+        mu_f_new=-2.0,
+        t_post=EPS,
+        t_delay_r=0.0,
+        t0=0.0,
+    ),
+    DISPStaggeredDDM.Params(
+        c=1.0,
+        mu_r=2.0,
+        mu_f=2.0,
+        d_r=1.0,
+        d_f=1.0,
+        tc_bound=1.0,
+        r_bound=1.0,
+        z0=0.95,
+        z0_new=0.95,
+        mu_r_new=2.0,
+        mu_f_new=2.0,
+        t_post=2.0,
+        t_delay_r=0.5,
+        t0=0.5,
+    ),
+]
