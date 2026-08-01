@@ -71,7 +71,7 @@ class BaseDDM:
         """Dynamically gets parameter count k from the subclass Params namedtuple."""
         return len(self.Params._fields)
 
-    def evaluate(self, params, data=DATA, method="qmle", use_chisq=False) -> ModelEvaluation:
+    def evaluate(self, params, data=DATA, method="qmpe", use_chisq=False) -> ModelEvaluation:
         """Computes NLL, AIC, and BIC and returns a structured evaluation dataclass."""
         neg_log_lik = self.compute_gof_all(params, data=data, method=method, use_chisq=use_chisq)
         n_params = len(params)
@@ -96,14 +96,14 @@ class BaseDDM:
             bic=bic,
         )
 
-    def fit(self, param_bounds, data=DATA, nr_workers=1, method="qmle", use_chisq=False):
+    def fit(self, param_bounds, data=DATA, nr_workers=1, method="qmpe", use_chisq=False):
         global_fit = self.fit_global(
             param_bounds=param_bounds, data=data, nr_workers=nr_workers, method=method, use_chisq=use_chisq
         )
         local_fit = self.fit_local(param_est=global_fit.x, data=data, method=method, use_chisq=use_chisq)
         return self.Params(*local_fit.x)
 
-    def fit_global(self, param_bounds, data=DATA, nr_workers=1, method="qmle", use_chisq=False):
+    def fit_global(self, param_bounds, data=DATA, nr_workers=1, method="qmpe", use_chisq=False):
         """
         Does a global maximum-likelihood parameter search, constrained by the bounds
         listed in param_bounds, and returns the result. Each RT distribution (i.e.,
@@ -122,7 +122,7 @@ class BaseDDM:
             polish=False,
         )
 
-    def fit_local(self, param_est, data=DATA, method="qmle", use_chisq=False):
+    def fit_local(self, param_est, data=DATA, method="qmpe", use_chisq=False):
         """
         Computes MLE of params using a local (fast) and unconstrained optimization
         algorithm. Each RT distribution (i.e., for each judgment category and
@@ -142,24 +142,31 @@ class BaseDDM:
         """Forces the specific model to define how its unique parameters are split."""
         raise NotImplementedError
 
-    def compute_gof_all(self, model_params, data=DATA, method="qmle", use_chisq=False):
+    def compute_gof_all(self, model_params, data=DATA, method="qmpe", use_chisq=False):
         """
         Computes the overall goodness-of-fit of the model defined by model_params.
         This is the sum of the NLL or chi-square statistics for the distribution
         of responses to both the old and new words.
         """
-        target_params, lure_params = self.split_params(model_params)
+        try:
+            target_params, lure_params = self.split_params(model_params)
 
-        old_data = [data.rem_hit.rt, data.know_hit.rt, data.miss.rt, data.rem_hit.conf, data.know_hit.conf]
-        new_data = [data.rem_fa.rt, data.know_fa.rt, data.CR.rt, data.rem_fa.conf, data.know_fa.conf]
+            old_data = [data.rem_hit.rt, data.know_hit.rt, data.miss.rt, data.rem_hit.conf, data.know_hit.conf]
+            new_data = [data.rem_fa.rt, data.know_fa.rt, data.CR.rt, data.rem_fa.conf, data.know_fa.conf]
 
-        gof_target = self.compute_model_gof(target_params, *old_data, method=method, use_chisq=use_chisq)
-        gof_lure = self.compute_model_gof(lure_params, *new_data, method=method, use_chisq=use_chisq)
+            gof_target = self.compute_model_gof(target_params, *old_data, method=method, use_chisq=use_chisq)
+            gof_lure = self.compute_model_gof(lure_params, *new_data, method=method, use_chisq=use_chisq)
 
-        return gof_target + gof_lure
+            total_gof = gof_target + gof_lure
+
+            if pl.isnan(total_gof) or pl.isinf(total_gof):
+                return 1e9
+            return total_gof
+        except Exception:
+            return 1e9
 
     def compute_model_gof(
-        self, model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, method="qmle", use_chisq=False
+        self, model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, method="qmpe", use_chisq=False
     ):
         gof_func_map = {
             "qmle": lambda: self._compute_model_gof_qmle(
@@ -179,59 +186,61 @@ class BaseDDM:
         return gof_func_map[method]()
 
     def _compute_model_gof_qmle(
-        self,
-        model_params,
-        rem_RTs,
-        know_RTs,
-        new_RTs,
-        rem_conf,
-        know_conf,
-        use_chisq=False,
+        self, model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, use_chisq=False, lapse_rate=0.02
     ):
-        nr_quantiles = self.config.nr_quantiles
-
-        # Total number of trials N
         N = len(rem_RTs) + len(know_RTs) + len(new_RTs)
 
         # Predicted quantiles and total mass for each category
         rem_qs, know_qs, new_qs, p_r, p_k, p_n = self.compute_model_quantiles(model_params)
-
-        # Number of confidence levels being used in the model
         nr_conf_levels = len(rem_qs)
 
+        # Pad internal quantiles
+        internal_cuts = pl.array(self.config.quantiles)
+        q_edges = pl.hstack([0.0, internal_cuts, 1.0])
+        bin_weights = pl.diff(q_edges)
+        nr_bins = len(bin_weights)
+
         # Pre-allocate frequency containers
-        rem_freqs = pl.zeros((nr_conf_levels, nr_quantiles))
-        know_freqs = pl.zeros((nr_conf_levels, nr_quantiles))
+        rem_freqs = pl.zeros((nr_conf_levels, nr_bins))
+        know_freqs = pl.zeros((nr_conf_levels, nr_bins))
 
         for i in range(nr_conf_levels):
-            # Isolate empirical RT vectors for the current confidence level
-            r_rts = rem_RTs[rem_conf == i]
-            k_rts = know_RTs[know_conf == i]
+            # We must reverse the empirical index here so Model High Conf matches Empirical High Conf.
+            emp_i = (nr_conf_levels - 1) - i
 
-            # Append infinity to the boundaries to ensure the final quantile catches the long RT tail
-            r_bins = pl.append(rem_qs[i], pl.inf)
-            k_bins = pl.append(know_qs[i], pl.inf)
+            # Isolate empirical RT vectors for the current confidence level
+            r_rts = rem_RTs[rem_conf == emp_i]
+            k_rts = know_RTs[know_conf == emp_i]
 
             # Computer number of RTs falling into each quantile bin
-            rem_freqs[i], _ = pl.histogram(r_rts, bins=r_bins)
-            know_freqs[i], _ = pl.histogram(k_rts, bins=k_bins)
+            rem_freqs[i], _ = pl.histogram(r_rts, bins=rem_qs[i])
+            know_freqs[i], _ = pl.histogram(k_rts, bins=know_qs[i])
 
         # Vectorized frequency count for New responses (Correct Rejections / False Alarms)
-        new_bins = pl.append(new_qs, pl.inf)
-        new_freqs, _ = pl.histogram(new_RTs, bins=new_bins)
-
-        # Flip these frequencies so they are in order of descending confidence levels
-        rem_freqs = pl.flipud(rem_freqs)
-        know_freqs = pl.flipud(know_freqs)
+        new_freqs, _ = pl.histogram(new_RTs, bins=new_qs)
 
         x = pl.hstack([rem_freqs.flatten(), know_freqs.flatten(), new_freqs])
 
-        # Compute probabilities for each category (1/nr_quantiles of mass is in each bin)
-        p_rem_pred = pl.repeat(p_r[:, None] / nr_quantiles, nr_quantiles, axis=1)
-        p_know_pred = pl.repeat(p_k[:, None] / nr_quantiles, nr_quantiles, axis=1)
-        p_new_pred = pl.repeat(p_n / nr_quantiles, nr_quantiles)
+        # Compute probabilities for each category
+        p_rem_pred = p_r[:, None] * bin_weights
+        p_know_pred = p_k[:, None] * bin_weights
+        p_new_pred = p_n * bin_weights
 
         p_pred = pl.hstack([p_rem_pred.flatten(), p_know_pred.flatten(), p_new_pred])
+
+        # Lapse rate
+        num_choices = (2 * nr_conf_levels) + 1
+        lapse_per_bin = lapse_rate / (num_choices * nr_bins)
+
+        p_pred = (1.0 - lapse_rate) * p_pred + lapse_per_bin
+
+        # Ensure predicted probabilities sum to exactly 1 and clip to prevent log(0)
+        p_sum = pl.sum(p_pred)
+        if p_sum == 0.0:
+            return 1e9
+
+        p_pred = p_pred / p_sum
+        p_pred = pl.clip(p_pred, EPS, 1.0)
 
         if use_chisq:
             return chi_square_gof(x, N, p_pred)
@@ -239,25 +248,39 @@ class BaseDDM:
             return -multinom_loglike(x, N, p_pred)
 
     def _compute_model_gof_qmpe(
-        self,
-        model_params,
-        rem_RTs,
-        know_RTs,
-        new_RTs,
-        rem_conf,
-        know_conf,
-        use_chisq=False,
+        self, model_params, rem_RTs, know_RTs, new_RTs, rem_conf, know_conf, use_chisq=False, lapse_rate=0.02
     ):
-        nr_quantiles = self.config.nr_quantiles
         N = len(rem_RTs) + len(know_RTs) + len(new_RTs)
 
         # Get continuous CDFs directly
         P_rem, P_know, P_new, p_rem_total, p_know_total, p_new_total, t = self.compute_model_cdfs(model_params)
         nr_conf_levels = len(P_rem)
 
+        # Internal quantiles
+        internal_cuts = pl.array(self.config.quantiles)
+        q_edges = pl.hstack([0.0, internal_cuts, 1.0])
+        bin_weights = pl.diff(q_edges)
+        nr_bins = len(bin_weights)
+
+        ### Lapse rate
+        num_choices = (2 * nr_conf_levels) + 1
+
+        # Cumulative mass of uniform distribution
+        uniform_cdf = pl.clip(t / self.config.max_t, 0.0, 1.0) * (1.0 / num_choices)
+
+        # Pre-calculate unnormalized model CDFs and mix with uniform
+        unnorm_rem = pl.zeros_like(P_rem)
+        unnorm_know = pl.zeros_like(P_know)
+
+        for i in range(nr_conf_levels):
+            unnorm_rem[i] = (1.0 - lapse_rate) * (P_rem[i] * p_rem_total[i]) + lapse_rate * uniform_cdf
+            unnorm_know[i] = (1.0 - lapse_rate) * (P_know[i] * p_know_total[i]) + lapse_rate * uniform_cdf
+
+        unnorm_new = (1.0 - lapse_rate) * (P_new * p_new_total) + lapse_rate * uniform_cdf
+
+        ### QMPE
         x_empirical = []
         p_predicted = []
-        q_edges = pl.linspace(0, 1, nr_quantiles + 1)
 
         for i in range(nr_conf_levels):
             # We must reverse the empirical index here so Model High Conf matches Empirical High Conf.
@@ -276,12 +299,13 @@ class BaseDDM:
                 x_empirical.extend(r_counts)
 
                 model_cdf_at_bounds = pl.append(
-                    pl.interp(r_emp_bounds[:-1], t, P_rem[i], left=0.0, right=1.0), 1.0
+                    pl.interp(r_emp_bounds[:-1], t, unnorm_rem[i], left=0.0, right=unnorm_rem[i][-1]),
+                    unnorm_rem[i][-1],
                 )
-                p_predicted.extend(pl.diff(model_cdf_at_bounds) * p_rem_total[i])
+                p_predicted.extend(pl.diff(model_cdf_at_bounds))
             else:
-                x_empirical.extend([0] * nr_quantiles)
-                p_predicted.extend([p_rem_total[i] / nr_quantiles] * nr_quantiles)
+                x_empirical.extend([0] * nr_bins)
+                p_predicted.extend(unnorm_rem[i][-1] * bin_weights)
 
             # Know Judgments
             if len(k_rts) > 0:
@@ -293,12 +317,13 @@ class BaseDDM:
                 x_empirical.extend(k_counts)
 
                 model_cdf_at_bounds = pl.append(
-                    pl.interp(k_emp_bounds[:-1], t, P_know[i], left=0.0, right=1.0), 1.0
+                    pl.interp(k_emp_bounds[:-1], t, unnorm_know[i], left=0.0, right=unnorm_know[i][-1]),
+                    unnorm_know[i][-1],
                 )
-                p_predicted.extend(pl.diff(model_cdf_at_bounds) * p_know_total[i])
+                p_predicted.extend(pl.diff(model_cdf_at_bounds))
             else:
-                x_empirical.extend([0] * nr_quantiles)
-                p_predicted.extend([p_know_total[i] / nr_quantiles] * nr_quantiles)
+                x_empirical.extend([0] * nr_bins)
+                p_predicted.extend(unnorm_know[i][-1] * bin_weights)
 
         # New Responses (Lures) do not have confidence splits in this block, so no reverse index needed
         if len(new_RTs) > 0:
@@ -309,14 +334,24 @@ class BaseDDM:
             new_counts, _ = pl.histogram(new_RTs, bins=new_emp_bounds)
             x_empirical.extend(new_counts)
 
-            model_cdf_at_bounds = pl.append(pl.interp(new_emp_bounds[:-1], t, P_new, left=0.0, right=1.0), 1.0)
-            p_predicted.extend(pl.diff(model_cdf_at_bounds) * p_new_total)
+            model_cdf_at_bounds = pl.append(
+                pl.interp(new_emp_bounds[:-1], t, unnorm_new, left=0.0, right=unnorm_new[-1]), unnorm_new[-1]
+            )
+            p_predicted.extend(pl.diff(model_cdf_at_bounds))
         else:
-            x_empirical.extend([0] * nr_quantiles)
-            p_predicted.extend([p_new_total / nr_quantiles] * nr_quantiles)
+            x_empirical.extend([0] * nr_bins)
+            p_predicted.extend(unnorm_new[-1] * bin_weights)
 
         x = pl.array(x_empirical)
-        p = pl.clip(pl.array(p_predicted), EPS, 1.0)
+        p = pl.array(p_predicted)
+
+        # Ensure predicted probabilities sum to exactly 1 and clip to prevent log(0)
+        p_sum = pl.sum(p)
+        if p_sum == 0.0:
+            return 1e9
+
+        p = p / p_sum
+        p = pl.clip(p, EPS, 1.0)
 
         if use_chisq:
             return chi_square_gof(x, N, p)
@@ -400,24 +435,24 @@ class BaseDDM:
         """Run the model and extract RT boundaries for each category."""
         P_rem, P_know, P_new, p_rem_total, p_know_total, p_new_total, t = self.compute_model_cdfs(model_params)
 
-        quantile_inc = 1.0 / self.config.nr_quantiles
-        quantiles = pl.arange(0, 1, quantile_inc)
+        quantiles = pl.array(self.config.quantiles)
 
         # Find time point for each quantile
         # Cumsum is already sorted, so we can use searchsorted
         max_idx = len(t) - 1
-        rem_quantiles = pl.array(
+
+        rem_internal = pl.array(
             [t[pl.clip(pl.searchsorted(P_rem[i], quantiles), 0, max_idx)] for i in range(len(P_rem))]
         )
-        know_quantiles = pl.array(
+        know_internal = pl.array(
             [t[pl.clip(pl.searchsorted(P_know[i], quantiles), 0, max_idx)] for i in range(len(P_know))]
         )
-        new_quantiles = t[pl.clip(pl.searchsorted(P_new, quantiles), 0, max_idx)]
+        new_internal = t[pl.clip(pl.searchsorted(P_new, quantiles), 0, max_idx)]
 
-        # Initialize first quantile at t=0
-        rem_quantiles[:, 0] = 0
-        know_quantiles[:, 0] = 0
-        new_quantiles[0] = 0
+        # Pad with 0 and infinity to create the full bin boundaries
+        rem_quantiles = pl.hstack([pl.zeros((len(P_rem), 1)), rem_internal, pl.full((len(P_rem), 1), pl.inf)])
+        know_quantiles = pl.hstack([pl.zeros((len(P_know), 1)), know_internal, pl.full((len(P_know), 1), pl.inf)])
+        new_quantiles = pl.hstack([[0.0], new_internal, [pl.inf]])
 
         return rem_quantiles, know_quantiles, new_quantiles, p_rem_total, p_know_total, p_new_total
 

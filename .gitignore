@@ -5,4 +5,5 @@
 *.mat
 *.pyd
 *.exe
+__pycache__
 plots
