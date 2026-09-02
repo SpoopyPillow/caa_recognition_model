@@ -1,8 +1,10 @@
+from typing import NamedTuple
 from dataclasses import dataclass
 
 @dataclass
 class ModelEvaluation:
     method: str
+    params: NamedTuple
     n_trials: int
     n_params: int
     nll: float

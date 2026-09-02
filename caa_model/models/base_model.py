@@ -71,24 +71,30 @@ class BaseDDM:
         """Dynamically gets parameter count k from the subclass Params namedtuple."""
         return len(self.Params._fields)
 
-    def evaluate(self, params, data=DATA, method="qmpe", use_chisq=False) -> ModelEvaluation:
+    def evaluate(
+        self, params, data=DATA, method="qmpe", use_chisq=False, n_params=None, n_trials=None
+    ) -> ModelEvaluation:
         """Computes NLL, AIC, and BIC and returns a structured evaluation dataclass."""
         neg_log_lik = self.compute_gof_all(params, data=data, method=method, use_chisq=use_chisq)
-        n_params = len(params)
-        n_trials = (
-            len(DATA.rem_hit.rt)
-            + len(DATA.know_hit.rt)
-            + len(DATA.CR.rt)
-            + len(DATA.miss.rt)
-            + len(DATA.rem_fa.rt)
-            + len(DATA.know_fa.rt)
-        )
+        if n_params is None:
+            n_params = len(params)
+
+        if n_trials is None:
+            n_trials = (
+                len(DATA.rem_hit.rt)
+                + len(DATA.know_hit.rt)
+                + len(DATA.CR.rt)
+                + len(DATA.miss.rt)
+                + len(DATA.rem_fa.rt)
+                + len(DATA.know_fa.rt)
+            )
 
         aic = 2 * n_params + 2 * neg_log_lik
         bic = n_params * pl.log(n_trials) + 2 * neg_log_lik
 
         return ModelEvaluation(
             method=method,
+            params=params,
             n_trials=n_trials,
             n_params=n_params,
             nll=neg_log_lik,
@@ -283,7 +289,7 @@ class BaseDDM:
         p_predicted = []
 
         for i in range(nr_conf_levels):
-            # We must reverse the empirical index here so Model High Conf matches Empirical High Conf.
+            # We must reverse the empirical index here so model high conf matches empirical high conf
             emp_i = (nr_conf_levels - 1) - i
 
             r_rts = rem_RTs[rem_conf == emp_i]
@@ -295,9 +301,11 @@ class BaseDDM:
                 r_emp_bounds[0] = 0.0
                 r_emp_bounds[-1] = pl.inf
 
+                # Get empirical counts in each quantile
                 r_counts, _ = pl.histogram(r_rts, bins=r_emp_bounds)
                 x_empirical.extend(r_counts)
 
+                # Predicted distribution uses discrete timesteps, so use interpolation for quantile cdf
                 model_cdf_at_bounds = pl.append(
                     pl.interp(r_emp_bounds[:-1], t, unnorm_rem[i], left=0.0, right=unnorm_rem[i][-1]),
                     unnorm_rem[i][-1],

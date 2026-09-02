@@ -121,11 +121,12 @@ class DISPClassicDDM(BaseDDM):
             s_r = pl.sqrt(2 * d_r * t_elapsed)
             s_f = pl.sqrt(2 * d_f * t_elapsed)
 
+            # Use conditional (r+f)=bound to make math simpler
             # Compute STD[r|(r+f) = bound]
             s_r_cond = s_r * pl.sqrt(1 - rho**2)
             s_f_cond = s_f * pl.sqrt(1 - (sigma_f / sigma) ** 2)
 
-            # Compute E[r|(r+f) > bound]
+            # Compute E[r|(r+f) = bound]
             mu_r_cond = mu_r * t_elapsed + (comb_est - t_elapsed * (mu_r + mu_f) - z0) * rho**2
 
             # --- Post-decision bivariate distribution (t_post seconds after decision) ---

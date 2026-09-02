@@ -185,14 +185,14 @@ param_bounds = (
     SISPConstrainedDDM.Params(
         c=3.0,
         mu_t=2.0,
-        mu_l=1.0,
+        mu_l=2.0,
         d=1.0,
         tc_bound=1.0,
         r_bound_offset=3.0,
         z0_t=2.0,
         z0_l=2.0,
         t_post=2.0,
-        sigma_z0=EPS,
+        sigma_z0=0.5,
         t0=1.0,
     ),
 )
