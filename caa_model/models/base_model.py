@@ -106,7 +106,9 @@ class BaseDDM:
         global_fit = self.fit_global(
             param_bounds=param_bounds, data=data, nr_workers=nr_workers, method=method, use_chisq=use_chisq
         )
-        local_fit = self.fit_local(param_est=global_fit.x, data=data, method=method, use_chisq=use_chisq)
+        local_fit = self.fit_local(
+            param_est=global_fit.x, param_bounds=param_bounds, data=data, method=method, use_chisq=use_chisq
+        )
         return self.Params(*local_fit.x)
 
     def fit_global(self, param_bounds, data=DATA, nr_workers=1, method="qmpe", use_chisq=False):
@@ -128,15 +130,26 @@ class BaseDDM:
             polish=False,
         )
 
-    def fit_local(self, param_est, data=DATA, method="qmpe", use_chisq=False):
+    def fit_local(self, param_est, param_bounds=None, data=DATA, method="qmpe", use_chisq=False):
         """
         Computes MLE of params using a local (fast) and unconstrained optimization
         algorithm. Each RT distribution (i.e., for each judgment category and
         confidence level) is represented using the number of quantiles specified by
         the 'quantiles' parameter.
         """
+
+        def bounded_objective(params, current_data, current_method, current_use_chisq):
+            if param_bounds:
+                for val, lower, upper in zip(params, param_bounds[0], param_bounds[1]):
+                    if val < lower or val > upper:
+                        return 1e9
+
+            return self.compute_gof_all(
+                params, data=current_data, method=current_method, use_chisq=current_use_chisq
+            )
+
         return minimize(
-            self.compute_gof_all,
+            bounded_objective,
             param_est,
             args=(data, method, use_chisq),
             method="Nelder-Mead",

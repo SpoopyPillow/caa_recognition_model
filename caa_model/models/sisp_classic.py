@@ -14,7 +14,7 @@ from ..config import EPS, INF_PROXY
 from ..utils.multinomial_funcs import get_rect_prob
 
 
-class SISPConstrainedDDM(BaseDDM):
+class SISPClassicDDM(BaseDDM):
     class Params(NamedTuple):
         c: float  # High confidence boundary
         mu_t: float  # Target drift
@@ -25,16 +25,15 @@ class SISPConstrainedDDM(BaseDDM):
         z0_t: float  # Target starting point
         z0_l: float  # Lure starting point
         t_post: float  # Post-decision accumulation time
-        sigma_z0: float  # Starting position variability
         t0: float  # Non-decision time
 
     @staticmethod
     def split_params(model_params):
-        c_val, mu_t, mu_l, d, tc, r_off, z0_t, z0_l, dT, s_z0, t0 = model_params
+        c_val, mu_t, mu_l, d, tc, r_off, z0_t, z0_l, dT, t0 = model_params
         c_list = [c_val, 0]
 
-        target_params = (c_list, mu_t, d, tc, r_off, z0_t, dT, s_z0, t0)
-        lure_params = (c_list, mu_l, d, tc, r_off, z0_l, dT, s_z0, t0)
+        target_params = (c_list, mu_t, d, tc, r_off, z0_t, dT, t0)
+        lure_params = (c_list, mu_l, d, tc, r_off, z0_l, dT, t0)
 
         return target_params, lure_params
 
@@ -56,9 +55,8 @@ class SISPConstrainedDDM(BaseDDM):
             z0             : starting location (recency > 0, novelty < 0)
             t_post         : post-response accumulation interval
             t0             : accumulation start time
-            sigma_z0       : variability in percieved familiarity across trials
         """
-        c, mu_r, d, tc_bound, r_bound_offset, z0, t_post, sigma_z0, t0 = params
+        c, mu_r, d, tc_bound, r_bound_offset, z0, t_post, t0 = params
         delta_t = self.config.delta_t
         max_t = self.config.max_t
         nr_tsteps = self.config.nr_tsteps
@@ -100,8 +98,7 @@ class SISPConstrainedDDM(BaseDDM):
         p_know_conf = pl.zeros((n + 1, pl.size(t)))  # Yes responses that are known (does not cross r_bound)
 
         # Initialize the probability mass distribution of the first time step
-        sigma_init = pl.sqrt(sigma**2 + sigma_z0**2)
-        tx[to_idx] = stats.norm.pdf(x, mu + z0, sigma_init) * delta_s
+        tx[to_idx] = stats.norm.pdf(x, mu + z0, sigma) * delta_s
 
         # Iterate through each time step
         for i in range(to_idx, len(t)):
@@ -153,23 +150,8 @@ class SISPConstrainedDDM(BaseDDM):
         return p_rem_conf, p_know_conf, p_new, t
 
 
-# Parameters obtained from using 10 quantiles
-params_est = SISPConstrainedDDM.Params(
-    1.7802366345277048,
-    1.0732968669582117,
-    0.17804995041166943,
-    0.5326415575619126,
-    0.043589790458315514,
-    0.9574460424899932,
-    -0.690027580392909,
-    -0.565893039286282,
-    1.5546604244949078,
-    0.12666843828878627,
-    0.46706560655302104,
-)
-
 param_bounds = (
-    SISPConstrainedDDM.Params(
+    SISPClassicDDM.Params(
         c=0.0,
         mu_t=0.0,
         mu_l=0.0,
@@ -179,10 +161,9 @@ param_bounds = (
         z0_t=-2.0,
         z0_l=-2.0,
         t_post=EPS,
-        sigma_z0=EPS,
         t0=0.0,
     ),
-    SISPConstrainedDDM.Params(
+    SISPClassicDDM.Params(
         c=3.0,
         mu_t=2.0,
         mu_l=2.0,
@@ -192,7 +173,6 @@ param_bounds = (
         z0_t=2.0,
         z0_l=2.0,
         t_post=2.0,
-        sigma_z0=0.5,
         t0=1.0,
     ),
 )

@@ -173,10 +173,6 @@ class DISPClassicDDM(BaseDDM):
         return p_rem_conf, p_know_conf, p_new, t
 
 
-params_est = DISPClassicDDM.Params(
-    0.9984, 0.002, 0.3035, 0.0037, 0.3736, 0.0585, 0.001, -0.1306, -0.0142, -0.2438, 0.5859, 0.5126
-)
-
 param_bounds = [
     DISPClassicDDM.Params(
         c=0.0,
