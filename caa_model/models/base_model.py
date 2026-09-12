@@ -81,12 +81,12 @@ class BaseDDM:
 
         if n_trials is None:
             n_trials = (
-                len(DATA.rem_hit.rt)
-                + len(DATA.know_hit.rt)
-                + len(DATA.CR.rt)
-                + len(DATA.miss.rt)
-                + len(DATA.rem_fa.rt)
-                + len(DATA.know_fa.rt)
+                len(data.rem_hit.rt)
+                + len(data.know_hit.rt)
+                + len(data.CR.rt)
+                + len(data.miss.rt)
+                + len(data.rem_fa.rt)
+                + len(data.know_fa.rt)
             )
 
         aic = 2 * n_params + 2 * neg_log_lik
