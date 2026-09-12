@@ -17,7 +17,7 @@ YAML_FILENAME = "data/neha_data_revised.yml"
 # empirical results structure
 ERStruct = namedtuple("ERStruct", ["know_hit", "rem_hit", "know_fa", "rem_fa", "CR", "miss"])
 # reaction time & confidence structure
-RTConf = namedtuple("RTConf", ["rt", "conf", "target"])
+RTConf = namedtuple("RTConf", ["rt", "conf", "target", "subj"])
 
 
 def save_word_lists():
@@ -51,13 +51,13 @@ def save_word_lists():
     lure_file.close()
 
 
-def reformat_revised_data():
+def reformat_revised_data(filename=YAML_FILENAME):
     """
     Converts individual trial data from yaml format into aggregate format and
     saves the result in a shelve database.
     """
     # open yaml file
-    ifile = open(YAML_FILENAME, "r")
+    ifile = open(filename, "r")
     # read in data string
     filestr = ifile.read()
     # close file
@@ -67,7 +67,7 @@ def reformat_revised_data():
     # compute aggregated results
     aggregated_data = compute_aggregate_results(neha_data)
     # save the reformatted data into a shelve database
-    db = shelve.open("data/neha_data.dat", "n")
+    db = shelve.open(f"{filename}.dat", "n")
     db["empirical_results"] = aggregated_data
     db.close()
 
@@ -87,7 +87,7 @@ def filter_word_data(word, data):
     for category in data:
         total_trials = len(category.rt)
         trials = [
-            (category.rt[i], category.conf[i], category.target[i])
+            (category.rt[i], category.conf[i], category.target[i], category.subj[i])
             for i in range(total_trials)
             if category.target[i] == word
         ]
@@ -121,7 +121,9 @@ def compute_aggregate_results(trial_list):
     miss_list = []
 
     for trial in trial_list:
-        trial_tuple = (trial["rt.normed"], trial["confidence"], trial["target"])
+        rt = trial["rt.normed"] if "rt.normed" in trial else trial["rt.secs"]
+
+        trial_tuple = (rt, trial["confidence"], trial["target"], str(trial["subject"]))
         if trial["judgment"] == "hit" and trial["rk.response"] == "remember":
             rem_hit_list.append(trial_tuple)
         elif trial["judgment"] == "hit" and trial["rk.response"] == "know":
