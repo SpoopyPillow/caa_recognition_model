@@ -481,26 +481,26 @@ class BaseDDM:
         """Generates the predicted probability distributions."""
         raise NotImplementedError
 
-    def plot_rt_distributions(self, params, show=True):
+    def plot_rt_distributions(self, params, axes=None, show=True):
         """Plots predicted RT probability density distributions for target and lure stimuli."""
         delta_t = self.config.delta_t
 
-        # Calculate predictions
         params_target, params_lure = self.split_params(params)
         p_rem, p_know, p_new, t = self.predicted_proportions(params_target)
         p_rem_lures, p_know_lures, p_new_lures, t = self.predicted_proportions(params_lure)
 
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        # Use passed axes or create a new figure
+        if axes is None:
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        else:
+            fig = axes[0].get_figure()
 
-        # Dynamically handle confidence levels
         nr_conf_levels = len(p_rem)
         confidence_labels = [f"conf={nr_conf_levels - 1 - i}" for i in range(nr_conf_levels)]
 
-        # Generate smooth color gradients matching confidence levels
         colors_rem = plt.colormaps["Reds"](pl.linspace(1, 0.4, nr_conf_levels))
         colors_know = plt.colormaps["Blues"](pl.linspace(1, 0.4, nr_conf_levels))
 
-        # Data mapping to eliminate duplicated code
         datasets = [
             (axes[0], p_rem, p_know, p_new, "RT Distributions for Target Words"),
             (axes[1], p_rem_lures, p_know_lures, p_new_lures, "RT Distributions for Lure Words"),
