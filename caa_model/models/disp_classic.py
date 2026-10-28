@@ -176,14 +176,14 @@ class DISPClassicDDM(BaseDDM):
 param_bounds = [
     DISPClassicDDM.Params(
         c=0.0,
-        mu_r=-2.0,
+        mu_r=0.0,
         mu_f=-2.0,
         d_r=EPS,
         d_f=EPS,
         tc_bound=0.0,
         r_bound=0.0,
         z0=-1.0,
-        mu_r_new=-2.0,
+        mu_r_new=0.0,
         mu_f_new=-2.0,
         t_post=EPS,
         t0=0.0,
